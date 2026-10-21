@@ -1,0 +1,47 @@
+// Keine zusätzlichen NPM-Abhängigkeiten. Start: node tests/smoke.mjs
+import assert from 'node:assert/strict';
+import {OS_LIST,VFS,homePath,pathDisplay,joinPath} from '../assets/vfs.js';
+import {MiniSQL,simulateCompiled,simulatePython} from '../assets/runtimes.js';
+import {TerminalEngine,promptFor} from '../assets/terminal.js';
+const storage=new Map();
+globalThis.localStorage={getItem:key=>storage.get(key)??null,setItem:(key,val)=>storage.set(key,String(val)),removeItem:key=>storage.delete(key)};
+const state={fs:null,db:null,servers:new Map(),python:{run:async()=>''},toast:()=>{},notifyFiles:()=>{},updateTerminalTitle:()=>{},openEditor:()=>{},openBrowser:()=>{},openFiles:()=>{},openSQL:()=>{}};
+const engine=new TerminalEngine(state);state.termEngine=engine;
+for(const os of OS_LIST){
+  state.fs=new VFS(os.id);state.db=new MiniSQL(os.id);state.servers.clear();
+  const cwd=joinPath(homePath(os.id),'Projects');
+  const shell={os:os.id,shell:os.shell,cwd,sqlMode:false,history:[],admin:false};
+  assert.ok(state.fs.read('hello.py',cwd).includes('print'),os.id+' demo file');
+  assert.ok(promptFor(shell).length>5,os.id+' prompt');
+  assert.ok((await engine.execute(os.id.startsWith('win')?'dir':'ls -la',shell)).includes('hello.py'),os.id+' list');
+  assert.ok((await engine.execute('whoami',shell)).toLowerCase().includes('student'),os.id+' whoami');
+  assert.equal(await engine.execute('mkdir versuch',shell),'',os.id+' mkdir');
+  assert.equal(await engine.execute('cd versuch',shell),'',os.id+' cd');
+  assert.equal(await engine.execute('echo test > test.txt',shell),'',os.id+' redirect');
+  assert.equal(state.fs.read('test.txt',shell.cwd),'test\n',os.id+' file write');
+  assert.equal(await engine.execute('cd ..',shell),'',os.id+' cd parent');
+  assert.ok(state.fs.exists('versuch/test.txt',shell.cwd),os.id+' file persists');
+  assert.ok((await engine.execute('python -m http.server 8000',shell)).includes('virtuell'),os.id+' server');
+  assert.ok((await engine.execute('curl http://localhost:8000',shell)).includes('404')===false,os.id+' simulated curl');
+  assert.ok((await engine.execute('sqlite3 demo.db',shell)).includes('SQL-Lernkonsole'),os.id+' SQL start');
+  assert.ok((await engine.execute('SELECT * FROM schueler;',shell)).includes('Alex'),os.id+' SQL terminal');
+  assert.equal(await engine.execute('.exit',shell),'SQL-Konsole verlassen.');
+  if(os.id.startsWith('win'))assert.ok((await engine.execute('uname -a',shell)).includes('nicht als Befehl'),os.id+' CMD semantics');
+  else assert.ok((await engine.execute('ipconfig',shell)).includes('command not found'),os.id+' Unix semantics');
+}
+let db=new MiniSQL('debian');
+let res=db.run("SELECT name, punkte FROM schueler WHERE punkte >= 90 ORDER BY punkte DESC;");
+assert.deepEqual(res.rows.map(r=>r.name),['Sam','Robin'],'comparison and sorting');
+res=db.run("INSERT INTO schueler (name, klasse, punkte) VALUES ('Mira', '9b', 92);");assert.ok(res.message.includes('eingefügt'));
+res=db.run("UPDATE schueler SET punkte = 98 WHERE name = 'Mira';");assert.equal(res.message,'1 Zeile(n) aktualisiert');
+res=db.run("SELECT COUNT(*) AS n FROM schueler WHERE punkte >= 90;");assert.equal(res.rows[0].n,3);
+res=db.run("DELETE FROM schueler WHERE name = 'Mira';");assert.equal(res.message,'1 Zeile(n) gelöscht');
+res=db.run('CREATE TABLE haustiere (id INTEGER, name TEXT);');assert.ok(res.message.includes('erstellt'));
+assert.equal(db.run('SHOW TABLES').rows.length,3);
+assert.equal(simulateCompiled('php','<?php $name = "Ada"; echo $name; ?>').output,'Ada');
+assert.equal(simulateCompiled('java','System.out.println(2 + 3);').output,'5');
+assert.equal(simulateCompiled('cs','Console.WriteLine("Hallo");').output,'Hallo');
+assert.ok(simulatePython('for i in range(3):\n    print("Hi")').output.split('\n').length===3);
+state.fs=new VFS('debian');state.fs.write('persist.txt','ok',homePath('debian'));
+assert.equal(new VFS('debian').read('persist.txt',homePath('debian')),'ok');
+console.log('PASS: 9 Betriebssysteme, OS-Kommandos, Dateisystem, SQL, Sprach-Demos und Persistenz.');
