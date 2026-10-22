@@ -8,6 +8,19 @@
 - [x] Smoke-Tests ergänzen und den lokalen Server auf erfolgreiche Auslieferung prüfen.
 - [ ] Visuelle Browser-Prüfung durchführen (in dieser Sitzung ist kein steuerbarer Browser verfügbar).
 
+## Struktogramm-Werkstatt: komplexer Code und Diagramme
+
+- [x] Einen verschachtelbaren Programmbaum statt flacher Einzelblöcke einführen.
+- [x] Python mit Einrückungsblöcken, `elif`/`else`, Schleifen, Funktionen und Klassen einlesen.
+- [x] JavaScript, Java, C#, C++ und ähnliche geschweifte Sprachen mit verschachtelten Blöcken, Klassen und Methoden einlesen.
+- [x] Den vollständigen Baum als Struktogramm anzeigen, ohne innere Schleifen oder Verzweigungen zu verlieren.
+- [x] Eine Flussdiagramm-Ansicht mit Start, Entscheidung, Prozess, Schleifenrückweg und Ende ergänzen.
+- [x] Eine UML-Klassendiagramm-Ansicht mit Klassen, Vererbung, Eigenschaften, Methoden und erkannten Abhängigkeiten ergänzen.
+- [x] Den Code-Generator rekursiv für manuell ergänzte Strukturblöcke beibehalten.
+- [x] Beispielcode, Hilfetext, automatisierte Parser-Tests und Dokumentation aktualisieren.
+- [x] Statische Prüfungen, Smoke-Test und einen lokalen HTTP-Check durchführen.
+- [ ] Visuelle Browser-Prüfung durchführen, sobald ein steuerbarer Browser verfügbar ist.
+
 ## OS-spezifische Minispiele
 
 - [x] Eine OS-Spiel-App auf Desktop, Taskleiste und Startmenü ergänzen.

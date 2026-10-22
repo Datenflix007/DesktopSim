@@ -95,6 +95,46 @@ const highlightedPython=highlightIDE('def hallo():\n  # Kommentar\n  print("Hall
 assert.match(highlightedPython,/token-keyword[^>]*>def/,'IDE highlights Python keywords');
 assert.match(highlightedPython,/token-comment[^>]*># Kommentar/,'IDE highlights comments');
 assert.match(highlightedPython,/token-string[^>]*>&quot;Hallo&quot;/,'IDE highlights strings safely');
+const structHelperSource=appSource.slice(appSource.indexOf('const STRUCT_LANGUAGES'),appSource.indexOf('\n\nclass DesktopSim'));
+const {parseStructuredCode,structClasses,structCodeFromNodes,structCountNodes}=Function(`${structHelperSource};return {parseStructuredCode,structClasses,structCodeFromNodes,structCountNodes};`)();
+const nestedPython=parseStructuredCode(`class Rechnung:
+    def summe(self, werte):
+        for wert in werte:
+            if wert > 0:
+                print(wert)
+            elif wert == 0:
+                print("neutral")
+            else:
+                print("ignoriert")
+
+class PremiumRechnung(Rechnung):
+    def anzeigen(self):
+        return Rechnung()`, 'python');
+assert.equal(structClasses(nestedPython).length,2,'Python classes are retained for UML');
+const pythonLoop=nestedPython[0].children[0].children[0];
+assert.equal(pythonLoop.type,'loop','nested Python loop is retained');
+assert.equal(pythonLoop.children[0].type,'if','nested Python decision is retained');
+assert.equal(pythonLoop.children[0].branches.length,3,'Python elif and else branches are retained');
+assert.match(structCodeFromNodes(nestedPython,'python'),/elif wert == 0:/,'nested Python tree can be generated again');
+const nestedJavaScript=parseStructuredCode(`class Rechnung {
+  summe(werte) {
+    for (const wert of werte) {
+      if (wert > 0) {
+        speichern(wert);
+      } else {
+        speichern(0);
+      }
+    }
+  }
+}
+class PremiumRechnung extends Rechnung {
+  anzeigen() { return new Rechnung(); }
+}`, 'javascript');
+assert.equal(structClasses(nestedJavaScript).length,2,'JavaScript classes are retained for UML');
+assert.ok(structCountNodes(nestedJavaScript)>=8,'brace parser retains nested JavaScript blocks');
+assert.equal(nestedJavaScript[0].children[0].children[0].type,'loop','nested JavaScript loop is retained');
+assert.equal(nestedJavaScript[0].children[0].children[0].children[0].branches.length,2,'JavaScript else branch is retained');
+assert.match(structCodeFromNodes(nestedJavaScript,'javascript'),/class PremiumRechnung extends Rechnung/,'class inheritance can be generated again');
 assert.match(appSource,/openStructogram\(\)/,'Struktogramm-App registered');
 assert.match(appSource,/openIDE\(file='hello\.py'/,'IDE-App registered');
 assert.match(appSource,/ideSyntaxHTML/,'IDE syntax highlighting layer registered');
@@ -104,7 +144,9 @@ assert.match(appSource,/git-graph-row/,'Git commit graph UI registered');
 assert.match(appSource,/openFunLab\(\)/,'Fun Lab registered');
 assert.match(appSource,/matrix-overlay/,'Matrix screensaver registered');
 assert.match(appSource,/Konami! Party-Modus/,'Konami Easter Egg registered');
-assert.match(appSource,/Code aus dem Struktogramm erzeugt/,'Struktogramm code generation wired');
+assert.match(appSource,/Code aus dem Programmbaum erzeugt/,'Struktogramm code generation wired');
+assert.match(appSource,/Flussdiagramm/,'flowchart view registered');
+assert.match(appSource,/UML-Klassen/,'UML class diagram view registered');
 assert.match(appSource,/https:\\\/\\\/datenflix007\\\.github\\\.io/,'Datenflix browser allowlist wired');
 assert.match(appSource,/allow-scripts allow-forms allow-popups/,'External page stays sandboxed');
 assert.match(appSource,/openSolitaire\(\)/,'Windows XP Solitaire registered');

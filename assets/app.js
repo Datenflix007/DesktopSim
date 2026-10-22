@@ -55,6 +55,180 @@ const ideSyntaxHTML=(source,extension)=>{
   return result+escapeHTML(text.slice(offset));
 };
 
+const STRUCT_LANGUAGES={python:{label:'Python',extension:'py',brace:false},javascript:{label:'JavaScript',extension:'js',brace:true},java:{label:'Java',extension:'java',brace:true},cs:{label:'C#',extension:'cs',brace:true},cpp:{label:'C++',extension:'cpp',brace:true}};
+let structNodeSerial=0;
+const structNode=(type,props={})=>({id:`struct-${++structNodeSerial}`,type,children:[],...props});
+const structBranch=(label,condition='')=>({label,condition,children:[]});
+const structIndent=line=>{const match=String(line).match(/^[\t ]*/)?.[0]||'';return [...match].reduce((sum,char)=>sum+(char==='\t'?2:1),0)};
+const stripStructComment=(line,language)=>{
+  const python=language==='python';let result='',quote='',escaped=false;
+  for(let index=0;index<String(line).length;index++){
+    const char=line[index],next=line[index+1];
+    if(quote){result+=char;if(escaped)escaped=false;else if(char==='\\')escaped=true;else if(char===quote)quote='';continue}
+    if(char==='"'||char==="'"){quote=char;result+=char;continue}
+    if((python&&char==='#')||(!python&&char==='/'&&next==='/'))break;
+    result+=char;
+  }
+  return result.trim();
+};
+const structClassInfo=(header,language)=>{
+  const text=header.trim().replace(/[:{]\s*$/,'').trim();
+  if(language==='python'){
+    const match=text.match(/^class\s+([A-Za-z_]\w*)(?:\s*\(([^)]*)\))?$/);if(!match)return null;
+    return {name:match[1],bases:(match[2]||'').split(',').map(value=>value.trim()).filter(Boolean)};
+  }
+  const match=text.match(/(?:^|\s)class\s+([A-Za-z_$][\w$]*)(?:\s+extends\s+([A-Za-z_$][\w$.]*))?(?:\s*:\s*([\w$.,\s]+))?(?:\s+implements\s+([\w$.,\s]+))?/);
+  if(!match)return null;
+  return {name:match[1],bases:[match[2],match[3],match[4]].filter(Boolean).flatMap(value=>value.split(',')).map(value=>value.trim()).filter(Boolean)};
+};
+const structFunctionInfo=(header,language)=>{
+  const text=header.trim().replace(/[:{]\s*$/,'').trim();
+  if(language==='python'){
+    const match=text.match(/^(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*(?:->\s*[^:]+)?$/);if(!match)return null;
+    return {name:match[1],params:match[2],signature:`${text.replace(/^async\s+/,'')}`};
+  }
+  let match=text.match(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)/);if(match)return {name:match[1],params:match[2],signature:text};
+  match=text.match(/^(?:(?:public|private|protected|internal|static|async|final|virtual|override|abstract|sealed|export|default|inline|constexpr)\s+)*(?:(?:[A-Za-z_$][\w$<>\[\],.?]*|void|int|double|float|boolean|bool|string|String)\s+)?([A-Za-z_$~][\w$]*)\s*\(([^)]*)\)\s*(?:const)?\s*(?:=>)?$/);
+  if(!match||/^(if|for|while|switch|catch)$/i.test(match[1]))return null;
+  return {name:match[1],params:match[2],signature:text};
+};
+const structHeaderNode=(header,language)=>{
+  const text=header.trim().replace(/[:{]\s*$/,'').trim(),classInfo=structClassInfo(text,language);
+  if(classInfo)return structNode('class',{name:classInfo.name,bases:classInfo.bases});
+  const isPython=language==='python';
+  const matchFor=(pattern)=>text.match(pattern)?.[1]?.trim()||'';
+  if(isPython){
+    if(/^if\s+/.test(text))return structNode('if',{condition:matchFor(/^if\s+(.+)$/),branches:[structBranch('Ja',matchFor(/^if\s+(.+)$/))]});
+    if(/^for\s+/.test(text))return structNode('loop',{loopKind:'for',condition:matchFor(/^for\s+(.+)$/)});
+    if(/^while\s+/.test(text))return structNode('loop',{loopKind:'while',condition:matchFor(/^while\s+(.+)$/)});
+    if(/^with\s+/.test(text))return structNode('block',{blockKind:'with',condition:matchFor(/^with\s+(.+)$/)});
+    if(/^try$/.test(text))return structNode('try',{branches:[structBranch('Versuch')]});
+    if(/^match\s+/.test(text))return structNode('switch',{condition:matchFor(/^match\s+(.+)$/),branches:[]});
+    const functionInfo=structFunctionInfo(text,language);if(functionInfo)return structNode('function',functionInfo);
+    return null;
+  }
+  if(/^if\s*\(/.test(text))return structNode('if',{condition:matchFor(/^if\s*\((.*)\)$/),branches:[structBranch('Ja',matchFor(/^if\s*\((.*)\)$/))]});
+  if(/^for\s*\(/.test(text))return structNode('loop',{loopKind:'for',condition:matchFor(/^for\s*\((.*)\)$/)});
+  if(/^while\s*\(/.test(text))return structNode('loop',{loopKind:'while',condition:matchFor(/^while\s*\((.*)\)$/)});
+  if(/^do$/.test(text))return structNode('loop',{loopKind:'do',condition:'mindestens einmal'});
+  if(/^switch\s*\(/.test(text))return structNode('switch',{condition:matchFor(/^switch\s*\((.*)\)$/),branches:[]});
+  if(/^try$/.test(text))return structNode('try',{branches:[structBranch('Versuch')]});
+  const functionInfo=structFunctionInfo(text,language);if(functionInfo)return structNode('function',functionInfo);
+  return null;
+};
+const structPrimaryChildren=node=>node.type==='if'||node.type==='try'?node.branches[0].children:node.children;
+const structIsElseHeader=(line,language)=>language==='python'?/^(elif\s+.+|else)\s*:?$/.test(line):/^else(?:\s+if\s*\(.*\))?$/.test(line);
+const structElseBranch=(line,language)=>{
+  const text=line.trim().replace(/[:{]\s*$/,'').trim();
+  if(language==='python'&&/^elif\s+/.test(text)){const condition=text.replace(/^elif\s+/,'').trim();return structBranch(`Sonst wenn: ${condition}`,condition)}
+  const braceMatch=text.match(/^else\s+if\s*\((.*)\)$/);if(braceMatch)return structBranch(`Sonst wenn: ${braceMatch[1].trim()}`,braceMatch[1].trim());
+  return structBranch('Nein');
+};
+const structCatchBranch=(line,language)=>{
+  const text=line.trim().replace(/[:{]\s*$/,'').trim();
+  if(/^(finally|final)$/.test(text))return structBranch('Immer ausführen');
+  return structBranch(text.replace(/^(except|catch)\s*/,'')||'Fehlerfall');
+};
+const structBraceTokens=source=>{
+  const tokens=[],push=()=>{const value=buffer.trim();if(value)tokens.push(value);buffer='';};let buffer='',quote='',escaped=false,lineComment=false,blockComment=false;
+  for(let index=0;index<String(source).length;index++){
+    const char=source[index],next=source[index+1];
+    if(lineComment){if(char==='\n'){lineComment=false;push()}continue}
+    if(blockComment){if(char==='*'&&next==='/'){blockComment=false;index++}continue}
+    if(quote){buffer+=char;if(escaped)escaped=false;else if(char==='\\')escaped=true;else if(char===quote)quote='';continue}
+    if(char==='"'||char==="'"||char==='`'){quote=char;buffer+=char;continue}
+    if(char==='/'&&next==='/'){lineComment=true;continue}
+    if(char==='/'&&next==='*'){blockComment=true;index++;continue}
+    if(char==='{'||char==='}'){push();tokens.push(char);continue}
+    if(char==='\n'){push();continue}
+    buffer+=char;
+  }
+  push();return tokens;
+};
+const parsePythonStructure=(source,language='python')=>{
+  const root=[],stack=[{indent:-1,children:root}];
+  for(const rawLine of String(source).replace(/\r/g,'').split('\n')){
+    const line=stripStructComment(rawLine,language);if(!line)continue;const indent=structIndent(rawLine);
+    while(stack.length>1&&stack.at(-1).indent>=indent)stack.pop();
+    const children=stack.at(-1).children;
+    if(structIsElseHeader(line,language)){
+      const previous=children.at(-1);if(previous?.type==='if'){
+        const branch=structElseBranch(line,language);previous.branches.push(branch);stack.push({indent,children:branch.children});continue;
+      }
+    }
+    if(/^(except\b.*|finally)\s*:?$/.test(line)){
+      const previous=children.at(-1);if(previous?.type==='try'){
+        const branch=structCatchBranch(line,language);previous.branches.push(branch);stack.push({indent,children:branch.children});continue;
+      }
+    }
+    if(/^case\s+.+\s*:?$/.test(line)){
+      const previous=children.at(-1);if(previous?.type==='switch'){
+        const branch=structBranch(line.replace(/^case\s+|:\s*$/g,''));previous.branches.push(branch);stack.push({indent,children:branch.children});continue;
+      }
+    }
+    const header=line.endsWith(':')?structHeaderNode(line,language):null;
+    const node=header||structNode('statement',{text:line});children.push(node);
+    if(header)stack.push({indent,children:structPrimaryChildren(node)});
+  }
+  return root;
+};
+const parseBraceStructure=(source,language)=>{
+  const root=[],stack=[{node:null,children:root}],tokens=structBraceTokens(source);let pending=null,lastClosed=null;
+  for(let index=0;index<tokens.length;index++){
+    const token=tokens[index];
+    if(token==='{'){if(pending){stack.push({node:pending.node,children:pending.children});pending=null;lastClosed=null}else stack.push({node:null,children:stack.at(-1).children});continue}
+    if(token==='}'){if(stack.length>1)lastClosed=stack.pop().node;pending=null;continue}
+    const line=token.trim();if(!line)continue;
+    if(structIsElseHeader(line,language)&&lastClosed?.type==='if'){
+      const branch=structElseBranch(line,language);lastClosed.branches.push(branch);pending={node:lastClosed,children:branch.children};lastClosed=null;continue;
+    }
+    if(/^(catch\b.*|finally)\s*$/.test(line)&&lastClosed?.type==='try'){
+      const branch=structCatchBranch(line,language);lastClosed.branches.push(branch);pending={node:lastClosed,children:branch.children};lastClosed=null;continue;
+    }
+    const switchNode=[...stack].reverse().find(entry=>entry.node?.type==='switch')?.node;
+    if(/^(case\s+.+:|default:)\s*$/.test(line)&&switchNode){
+      const branch=structBranch(line.replace(/^(case\s+|default\s*:?)/,'').replace(/:$/,'').trim()||'Standard');switchNode.branches.push(branch);stack.at(-1).children=branch.children;continue;
+    }
+    const next=tokens[index+1],header=next==='{'?structHeaderNode(line,language):null;
+    if(header){stack.at(-1).children.push(header);pending={node:header,children:structPrimaryChildren(header)};lastClosed=null;continue}
+    stack.at(-1).children.push(structNode('statement',{text:line.replace(/;\s*$/,'').trim()}));lastClosed=null;
+  }
+  return root;
+};
+const parseStructuredCode=(source,language)=>language==='python'?parsePythonStructure(source,language):parseBraceStructure(source,language);
+const structFindNode=(nodes,id)=>{
+  for(const node of nodes){if(node.id===id)return node;const found=structFindNode(node.children||[],id)||((node.branches||[]).map(branch=>structFindNode(branch.children,id)).find(Boolean));if(found)return found}
+  return null;
+};
+const removeStructNode=(nodes,id)=>{
+  const index=nodes.findIndex(node=>node.id===id);if(index>=0){nodes.splice(index,1);return true}
+  return nodes.some(node=>removeStructNode(node.children||[],id)||(node.branches||[]).some(branch=>removeStructNode(branch.children,id)));
+};
+const structCountNodes=nodes=>nodes.reduce((count,node)=>count+1+structCountNodes(node.children||[])+(node.branches||[]).reduce((sum,branch)=>sum+structCountNodes(branch.children),0),0);
+const structIndentCode=(code,level)=>String(code||'').split('\n').map(line=>`${'  '.repeat(level)}${line}`).join('\n');
+const structCleanStatement=(text,language)=>{const value=String(text||'').trim();if(!value)return language==='python'?'pass':';';return language!=='python'&&!/[;{}]$/.test(value)?`${value};`:value};
+const structCodeFromNodes=(nodes,language,level=0)=>nodes.map(node=>{
+  const body=structCodeFromNodes(node.children||[],language,level+1)||structIndentCode(structCleanStatement('',language),level+1),py=language==='python';
+  if(node.type==='statement')return structIndentCode(structCleanStatement(node.text,language),level);
+  if(node.type==='class'){const bases=(node.bases||[]).filter(Boolean);const head=py?`class ${node.name||'NeueKlasse'}${bases.length?`(${bases.join(', ')})`:''}`:`class ${node.name||'NeueKlasse'}${bases[0]?` extends ${bases[0]}`:''}`;return py?`${structIndentCode(head+':',level)}\n${body}`:`${structIndentCode(head+' {',level)}\n${body}\n${structIndentCode('}',level)}`}
+  if(node.type==='function'){const signature=py?`def ${node.name||'funktion'}(${node.params||''}):`:(node.signature||`${node.name||'funktion'}(${node.params||''})`)+' {';return py?`${structIndentCode(signature,level)}\n${body}`:`${structIndentCode(signature,level)}\n${body}\n${structIndentCode('}',level)}`}
+  if(node.type==='if'){
+    return (node.branches||[]).map((branch,index)=>{const branchBody=structCodeFromNodes(branch.children,language,level+1)||structIndentCode(structCleanStatement('',language),level+1);if(py){const head=index===0?`if ${node.condition||'Bedingung'}:`:branch.condition?`elif ${branch.condition}:`:'else:';return `${structIndentCode(head,level)}\n${branchBody}`}const head=index===0?`if (${node.condition||'condition'}) {`:branch.condition?`else if (${branch.condition}) {`:'else {';return `${structIndentCode(head,level)}\n${branchBody}\n${structIndentCode('}',level)}`}).join(py?'\n':' else ');
+  }
+  if(node.type==='loop'){const head=py?`${node.loopKind==='for'?'for':'while'} ${node.condition||'Bedingung'}:`:`${node.loopKind==='do'?'do':node.loopKind||'while'} (${node.condition||'condition'}) {`;return py?`${structIndentCode(head,level)}\n${body}`:`${structIndentCode(head,level)}\n${body}\n${structIndentCode('}',level)}`}
+  if(node.type==='switch'){const branches=node.branches||[];if(py)return branches.map(branch=>`${structIndentCode(`if ${node.condition||'wert'} == ${branch.condition||'wert'}:`,level)}\n${structCodeFromNodes(branch.children,language,level+1)||structIndentCode('pass',level+1)}`).join('\n');return `${structIndentCode(`switch (${node.condition||'wert'}) {`,level)}\n${branches.map(branch=>`${structIndentCode(`case ${branch.condition||'wert'}:`,level+1)}\n${structCodeFromNodes(branch.children,language,level+2)||structIndentCode(';',level+2)}\n${structIndentCode('break;',level+2)}`).join('\n')}\n${structIndentCode('}',level)}`}
+  return `${structIndentCode(`${node.blockKind||'try'}${py?':':' {'}`,level)}\n${body}${py?'':`\n${structIndentCode('}',level)}`}`;
+}).join('\n');
+const structLabel=node=>{
+  if(node.type==='statement')return node.text||'Anweisung';if(node.type==='class')return `Klasse ${node.name||'NeueKlasse'}`;if(node.type==='function')return `Methode ${node.name||'funktion'}(${node.params||''})`;if(node.type==='if')return `Wenn ${node.condition||'Bedingung'}`;if(node.type==='loop')return `${node.loopKind==='for'?'Für':'Solange'} ${node.condition||'Bedingung'}`;if(node.type==='switch')return `Auswahl: ${node.condition||'Wert'}`;return `${node.blockKind||node.type}: ${node.condition||''}`.trim();
+};
+const structClasses=nodes=>nodes.flatMap(node=>[...(node.type==='class'?[node]:[]),...structClasses(node.children||[]),...(node.branches||[]).flatMap(branch=>structClasses(branch.children))]);
+const structClassFields=node=>(node.children||[]).filter(child=>child.type==='statement'&&child.text&&!/^(return|throw|break|continue)\b/.test(child.text)).map(child=>child.text);
+const structTextForNode=node=>[node.text,node.signature,node.condition,node.params,...(node.children||[]).flatMap(structTextForNode),...(node.branches||[]).flatMap(branch=>branch.children.flatMap(structTextForNode))].filter(Boolean).join(' ');
+const structDependencies=(node,classes)=>{
+  const text=structTextForNode(node),known=classes.map(item=>item.name).filter(name=>name&&name!==node.name);return known.filter(name=>new RegExp(`\\b(?:new\\s+)?${name}\\b`).test(text));
+};
+
 class DesktopSim{
   constructor(){
     this.desktop=$('#desktop');this.layer=$('#window-layer');this.windows=new Map();this.serial=0;this.z=10;
@@ -296,8 +470,8 @@ class DesktopSim{
     const render=()=>{w.content.innerHTML=`<div class="game-bar mac-game-bar"><div><strong>Drei gewinnt</strong><span>macOS Spielbrett</span></div><button data-game-new>Neue Runde</button></div><div class="mac-grid">${state.cells.map((value,index)=>`<button data-mac-cell="${index}" ${value||state.over?'disabled':''}>${value}</button>`).join('')}</div><div class="game-message">${escapeHTML(state.message)}</div>`;$('[data-game-new]',w.content).addEventListener('click',()=>{state.cells=Array(9).fill('');state.over=false;state.message='Du spielst X. Der Mac spielt O.';render()});w.content.querySelectorAll('[data-mac-cell]').forEach(button=>button.addEventListener('click',()=>{const index=+button.dataset.macCell;if(state.over||state.cells[index])return;state.cells[index]='X';let result=winner();if(result){state.over=true;state.message='Du gewinnst!';render();return;}const free=state.cells.map((value,i)=>value?null:i).filter(i=>i!==null);if(!free.length){state.over=true;state.message='Unentschieden.';render();return;}state.cells[free[Math.floor(Math.random()*free.length)]]='O';result=winner();if(result){state.over=true;state.message='Der Mac gewinnt diese Runde.'}else if(state.cells.every(Boolean)){state.over=true;state.message='Unentschieden.'}render()}));};
     render();return w;
   }
-  openStructogram(){
-    const w=this.makeWindow('structogram','Struktogramm · Codewerkstatt','structure',{width:960,height:650});
+  openSimpleStructogram(){
+    const w=this.makeWindow('structogram','Struktogramm · Diagrammwerkstatt','structure',{width:1080,height:710});
     const state={language:'python',nodes:[{type:'statement',text:'summe = 0'},{type:'for',condition:'i in range(1, 6)',text:'summe = summe + i'},{type:'if',condition:'summe > 10',text:'print(summe)',elseText:'print("noch klein")'}]};
     const cleanStatement=(text,lang)=>{const value=(text||'').trim();return lang==='javascript'&&value&&!/[;{}]$/.test(value)?value+';':value|| (lang==='python'?'pass':';')};
     const indented=(text,lang)=>String(cleanStatement(text,lang)).split('\n').map(line=>'  '+line).join('\n');
@@ -347,6 +521,109 @@ class DesktopSim{
     w.content.querySelectorAll('[data-struct-action]').forEach(button=>button.addEventListener('click',()=>{const action=button.dataset.structAction;if(action==='generate'){codeArea.value=codeFromNodes();this.toast('Code aus dem Struktogramm erzeugt')}if(action==='parse'){parseCode(codeArea.value);render();this.toast('Struktogramm aus dem Code erstellt')}if(action==='example'){state.nodes=[{type:'statement',text:state.language==='python'?'zahl = 4':'let zahl = 4;'},{type:'if',condition:'zahl % 2 === 0',text:state.language==='python'?'print("gerade")':'console.log("gerade");',elseText:state.language==='python'?'print("ungerade")':'console.log("ungerade");'}];codeArea.value=codeFromNodes();render()}if(action==='editor'){const ext=state.language==='python'?'py':'js',file=`struktogramm.${ext}`;this.fs.write(file,codeFromNodes(),joinPath(homePath(this.currentOS),'Projects'));this.openEditor(file,joinPath(homePath(this.currentOS),'Projects'));this.toast('Code im Editor geöffnet')}}));
     render();return w;
   }
+  openStructogram(){
+    const w=this.makeWindow('structogram','Struktogramm · Diagrammwerkstatt','structure',{width:1080,height:710});
+    const exampleFor=language=>language==='python'?`class Rechnung:
+    def __init__(self, werte):
+        self.werte = werte
+
+    def summe_positive(self):
+        summe = 0
+        for wert in self.werte:
+            if wert > 0:
+                summe = summe + wert
+            elif wert == 0:
+                print("neutral")
+            else:
+                print("übersprungen")
+        return summe
+
+class PremiumRechnung(Rechnung):
+    def anzeigen(self):
+        if self.summe_positive() > 10:
+            print("Premium")
+        else:
+            print("Standard")`:`class Rechnung {
+  constructor(werte) {
+    this.werte = werte;
+  }
+
+  summePositive() {
+    let summe = 0;
+    for (const wert of this.werte) {
+      if (wert > 0) {
+        summe = summe + wert;
+      } else if (wert === 0) {
+        console.log("neutral");
+      } else {
+        console.log("übersprungen");
+      }
+    }
+    return summe;
+  }
+}
+
+class PremiumRechnung extends Rechnung {
+  anzeigen() {
+    if (this.summePositive() > 10) {
+      console.log("Premium");
+    }
+  }
+}`;
+    const state={language:'python',view:'struct',nodes:parseStructuredCode(exampleFor('python'),'python')};
+    const nodeField=(node,field,label)=>`<label class="struct-field">${label?`<span>${escapeHTML(label)}</span>`:''}<input data-struct-node="${node.id}" data-struct-field="${field}" value="${escapeHTML(node[field]??'')}"></label>`;
+    const childrenHTML=nodes=>nodes.length?nodes.map(nodeHTML).join(''):'<div class="struct-empty">leer</div>';
+    const branchHTML=branch=>`<section class="struct-branch"><strong>${escapeHTML(branch.label)}</strong><div class="struct-nested">${childrenHTML(branch.children)}</div></section>`;
+    const nodeHTML=node=>{
+      const remove=`<button data-struct-remove="${node.id}" title="Block entfernen" aria-label="Block entfernen">×</button>`;
+      if(node.type==='statement')return `<article class="struct-node struct-statement"><header><strong>Anweisung</strong>${remove}</header>${nodeField(node,'text','')}</article>`;
+      if(node.type==='if')return `<article class="struct-node struct-if"><header><strong>Verzweigung</strong>${remove}</header>${nodeField(node,'condition','Bedingung')}<div class="struct-branches">${node.branches.map(branchHTML).join('')}</div></article>`;
+      if(node.type==='loop')return `<article class="struct-node struct-loop"><header><strong>${node.loopKind==='for'?'Zählschleife':'Wiederholung'}</strong>${remove}</header>${nodeField(node,'condition',node.loopKind==='for'?'Schleifenkopf':'Bedingung')}<div class="struct-nested">${childrenHTML(node.children)}</div></article>`;
+      if(node.type==='class')return `<article class="struct-node struct-class"><header><strong>Klasse</strong>${remove}</header><div class="struct-scope-fields">${nodeField(node,'name','Name')}${nodeField({...node,bases:(node.bases||[]).join(', ')},'bases','Erbt von')}</div><div class="struct-nested">${childrenHTML(node.children)}</div></article>`;
+      if(node.type==='function')return `<article class="struct-node struct-function"><header><strong>Funktion / Methode</strong>${remove}</header><div class="struct-scope-fields">${nodeField(node,'name','Name')}${nodeField(node,'params','Parameter')}</div><div class="struct-nested">${childrenHTML(node.children)}</div></article>`;
+      if(node.type==='switch')return `<article class="struct-node struct-switch"><header><strong>Auswahl</strong>${remove}</header>${nodeField(node,'condition','Ausdruck')}<div class="struct-branches">${node.branches.map(branchHTML).join('')||'<div class="struct-empty">keine Fälle</div>'}</div></article>`;
+      return `<article class="struct-node struct-try"><header><strong>Fehlerbehandlung</strong>${remove}</header><div class="struct-branches">${node.branches.map(branchHTML).join('')}</div></article>`;
+    };
+    const flowNodes=nodes=>nodes.map(node=>{
+      if(node.type==='if'||node.type==='switch'||node.type==='try')return `<section class="flow-group"><div class="flow-step flow-decision">${escapeHTML(structLabel(node))}</div><div class="flow-branches">${(node.branches||[]).map(branch=>`<div class="flow-branch"><span>${escapeHTML(branch.label)}</span>${flowNodes(branch.children)||'<div class="flow-step flow-empty">weiter</div>'}</div>`).join('')}</div><div class="flow-join">◆ zusammenführen</div></section>`;
+      if(node.type==='loop')return `<section class="flow-group flow-loop"><div class="flow-step flow-decision">${escapeHTML(structLabel(node))}</div><div class="flow-loop-body">${flowNodes(node.children)||'<div class="flow-step flow-empty">leer</div>'}</div><div class="flow-loop-back">↺ zurück zur Bedingung</div></section>`;
+      if(node.type==='class'||node.type==='function'||node.type==='block')return `<section class="flow-scope"><div class="flow-step flow-scope-head">${escapeHTML(structLabel(node))}</div>${flowNodes(node.children)||'<div class="flow-step flow-empty">leer</div>'}</section>`;
+      return `<div class="flow-step flow-process">${escapeHTML(structLabel(node))}</div>`;
+    }).join('');
+    const flowHTML=()=>`<div class="flowchart" aria-label="Flussdiagramm"><div class="flow-step flow-terminal">Start</div>${flowNodes(state.nodes)||'<div class="flow-step flow-empty">Kein Code</div>'}<div class="flow-step flow-terminal">Ende</div></div>`;
+    const umlHTML=()=>{
+      const classes=structClasses(state.nodes);if(!classes.length)return '<div class="diagram-empty"><strong>Noch keine Klasse erkannt.</strong><span>Füge eine Klasse ein oder verwende das Beispiel, um ein UML-Klassendiagramm zu erhalten.</span></div>';
+      return `<div class="uml-canvas" aria-label="UML-Klassendiagramm">${classes.map(node=>{const fields=structClassFields(node),methods=(node.children||[]).filter(child=>child.type==='function'),dependencies=structDependencies(node,classes),relations=[...(node.bases||[]).map(base=>`△ erbt von ${base}`),...dependencies.filter(name=>!(node.bases||[]).includes(name)).map(name=>`⋯ nutzt ${name}`)];return `<article class="uml-class"><header>«class»<strong>${escapeHTML(node.name||'NeueKlasse')}</strong></header><section><strong>Attribute</strong>${fields.length?`<ul>${fields.map(field=>`<li>− ${escapeHTML(field)}</li>`).join('')}</ul>`:'<small>keine erkannt</small>'}</section><section><strong>Operationen</strong>${methods.length?`<ul>${methods.map(method=>`<li>+ ${escapeHTML(method.name)}(${escapeHTML(method.params||'')})</li>`).join('')}</ul>`:'<small>keine erkannt</small>'}</section>${relations.length?`<footer>${relations.map(relation=>`<span>${escapeHTML(relation)}</span>`).join('')}</footer>`:''}</article>`}).join('')}</div>`;
+    };
+    const addNode=type=>{
+      if(type==='statement')return structNode('statement',{text:state.language==='python'?'neue_anweisung()':'neueAnweisung()'});
+      if(type==='if')return structNode('if',{condition:'Bedingung',branches:[structBranch('Ja','Bedingung'),structBranch('Nein')]});
+      if(type==='loop')return structNode('loop',{loopKind:'while',condition:'Bedingung'});
+      if(type==='function')return structNode('function',{name:'neue_funktion',params:''});
+      return structNode('class',{name:'NeueKlasse',bases:[]});
+    };
+    w.content.className='window-content structogram-content';
+    w.content.innerHTML=`<div class="struct-toolbar"><div><strong>Struktogramm- & Diagrammwerkstatt</strong><span>Analysiert verschachtelte Blöcke, Klassen und Methoden lokal im Browser.</span></div><label>Sprache <select data-struct-language>${Object.entries(STRUCT_LANGUAGES).map(([id,info])=>`<option value="${id}">${info.label}</option>`).join('')}</select></label><button data-struct-action="parse">Code analysieren</button><button class="accent-action" data-struct-action="generate">Code erzeugen</button><button data-struct-action="editor">Im Editor öffnen</button></div><div class="struct-workspace"><section class="struct-code-pane"><div class="struct-pane-head"><strong>QUELLCODE</strong><button data-struct-action="example">Verschachteltes Beispiel</button></div><textarea class="struct-code" aria-label="Code für Diagramme">${escapeHTML(exampleFor('python'))}</textarea><p>Python sowie JavaScript, Java, C# und C++: Klassen, Methoden, verschachtelte <code>if</code>/<code>else</code>-Zweige und Schleifen werden als Baum gelesen. Der Parser ist absichtlich lokal und kein vollständiger Compiler.</p></section><section class="struct-diagram-pane"><div class="struct-pane-head"><strong>ANALYSE</strong><span class="struct-status"></span></div><div class="struct-view-tabs" role="tablist" aria-label="Diagrammansicht"><button data-struct-view="struct" role="tab">Struktogramm</button><button data-struct-view="flow" role="tab">Flussdiagramm</button><button data-struct-view="uml" role="tab">UML-Klassen</button></div><div class="struct-add"><span>Manuell ergänzen:</span><button data-struct-add="statement">+ Anweisung</button><button data-struct-add="if">+ Wenn</button><button data-struct-add="loop">+ Schleife</button><button data-struct-add="function">+ Funktion</button><button data-struct-add="class">+ Klasse</button></div><div class="struct-diagram" aria-live="polite"></div></section></div>`;
+    const codeArea=$('.struct-code',w.content),diagram=$('.struct-diagram',w.content),language=$('[data-struct-language]',w.content),status=$('.struct-status',w.content),viewButtons=[...w.content.querySelectorAll('[data-struct-view]')];
+    const render=()=>{
+      status.textContent=`${structCountNodes(state.nodes)} Bausteine · ${structClasses(state.nodes).length} Klassen`;
+      viewButtons.forEach(button=>{button.classList.toggle('active',button.dataset.structView===state.view);button.setAttribute('aria-selected',button.dataset.structView===state.view?'true':'false')});
+      diagram.innerHTML=state.view==='flow'?flowHTML():state.view==='uml'?umlHTML():`<div class="struct-tree">${state.nodes.length?state.nodes.map(nodeHTML).join(''):'<div class="diagram-empty">Kein Code erkannt.</div>'}</div>`;
+      diagram.querySelectorAll('[data-struct-field]').forEach(input=>input.addEventListener('input',()=>{const node=structFindNode(state.nodes,input.dataset.structNode);if(!node)return;if(input.dataset.structField==='bases')node.bases=input.value.split(',').map(value=>value.trim()).filter(Boolean);else node[input.dataset.structField]=input.value;}));
+      diagram.querySelectorAll('[data-struct-remove]').forEach(button=>button.addEventListener('click',()=>{removeStructNode(state.nodes,button.dataset.structRemove);render()}));
+    };
+    viewButtons.forEach(button=>button.addEventListener('click',()=>{state.view=button.dataset.structView;render()}));
+    w.content.querySelectorAll('[data-struct-add]').forEach(button=>button.addEventListener('click',()=>{state.nodes.push(addNode(button.dataset.structAdd));state.view='struct';render()}));
+    language.addEventListener('change',()=>{codeArea.value=structCodeFromNodes(state.nodes,language.value);state.language=language.value;state.view='struct';render()});
+    w.content.querySelectorAll('[data-struct-action]').forEach(button=>button.addEventListener('click',()=>{
+      const action=button.dataset.structAction;
+      if(action==='parse'){state.nodes=parseStructuredCode(codeArea.value,state.language);state.view='struct';render();this.toast(`${structCountNodes(state.nodes)} Bausteine aus dem Code erkannt`)}
+      if(action==='generate'){codeArea.value=structCodeFromNodes(state.nodes,state.language);this.toast('Code aus dem Programmbaum erzeugt')}
+      if(action==='example'){codeArea.value=exampleFor(state.language);state.nodes=parseStructuredCode(codeArea.value,state.language);state.view='struct';render();this.toast('Verschachteltes Beispiel geladen')}
+      if(action==='editor'){const ext=STRUCT_LANGUAGES[state.language].extension,file=`diagramm-struktur.${ext}`,code=structCodeFromNodes(state.nodes,state.language);this.fs.write(file,code,joinPath(homePath(this.currentOS),'Projects'));this.openEditor(file,joinPath(homePath(this.currentOS),'Projects'));this.toast('Diagramm-Code im Editor geöffnet')}
+    }));
+    render();return w;
+  }
   openBrowser(path,base,customHTML){
     const w=this.makeWindow('browser','Browser · localhost','browser',{width:780,height:560});w.content.className='window-content browser-content';
     w.content.innerHTML=`<div class="browser-toolbar"><button data-browser="back" aria-label="Startseite">⌂</button><button data-browser="refresh" aria-label="Neu laden">↻</button><input class="browser-address" aria-label="Adresse" spellcheck="false" value="${escapeHTML(path||'http://localhost:8000')}"><button data-browser="go">Öffnen →</button></div><div class="browser-area"></div><div class="browser-status">Virtueller Browser · localhost und datenflix007.github.io · isolierte Darstellung</div>`;
@@ -382,6 +659,7 @@ class DesktopSim{
     const w=this.makeWindow('guide',`Hilfe · ${this.os.label}`,'info',{width:780,height:570});w.content.className='window-content guide-content';
     const win=isWindows(this.currentOS);const commands=win?['dir','cd Projects','python hello.py','javac Main.java && java Main','g++ main.cpp -o hallo && hallo.exe','sqlite3 demo.db']:['ls -la','cd ~/Projects','python3 hello.py','javac Main.java && java Main','g++ main.cpp -o hallo && ./hallo','sqlite3 demo.db'];
     w.content.innerHTML=`<div class="guide-intro"><div class="eyebrow">DESKTOPSIM / LERNMODUS</div><h2>Entdecke ${escapeHTML(this.os.label)}</h2><p>Eine interaktive Übungsumgebung für Desktop-Navigation, Kommandozeile, Dateisysteme und Programmierung.</p></div><div class="guide-sections"><article><h3>01 · Erste Befehle</h3><p>Klicke auf ein Beispiel, um ein neues Terminal mit dem eingegebenen Befehl zu öffnen.</p><div class="guide-chips">${commands.map(c=>`<button type="button" data-example="${escapeHTML(c)}"><code>${escapeHTML(c)}</code> ↗</button>`).join('')}</div></article><article><h3>02 · Dateien, Code und Struktogramme</h3><p>Im Dateimanager liegen unter <code>${escapeHTML(pathDisplay(this.currentOS,joinPath(homePath(this.currentOS),'Projects')))}</code> Beispiele für Python, Java, C, C++, JavaScript, C#, PHP, HTML und SQL. Der Editor prüft und zeigt Ausgaben für die Lernsprachen; die Struktogramm-Werkstatt erzeugt aus einfachen Python- oder JavaScript-Schritten einen Ablauf und kann ihn wieder als Code speichern.</p></article><article><h3>03 · Browser: localhost und Datenflix</h3><p>Starte in der Konsole <code>${win?'python':'python3'} -m http.server 8000</code> und öffne <code>http://localhost:8000</code>. Das bleibt ein <strong>virtueller</strong> Server. Zusätzlich kann der Browser <code>https://datenflix007.github.io/</code> im Fenster laden; dort kann normal weitergeklickt werden.</p></article><article><h3>04 · Was läuft wirklich?</h3><ul><li>Virtuelles Dateisystem: echte Bearbeitung von Simulationdateien mit Speicherung im Browser.</li><li>Struktogramm: ein lokaler Editor mit nachvollziehbarer, begrenzter Code-Umwandlung für Anweisungen, Bedingungen und Schleifen.</li><li>HTML/CSS/JavaScript: lokale Vorschauen in einem isolierten iframe; die freigegebene Datenflix-Seite wird ebenfalls isoliert eingebettet.</li><li>Python: echte Ausführung über Pyodide/WebAssembly, sobald der externe Download gelingt; offline nur vereinfachte Demo.</li><li>Java, C, C++, C#, PHP und Node: <strong>Quelltextprüfung und begrenzte Ausgabe-Demo</strong>. GitHub Pages kann keinen nativen javac-, g++-, GCC-, .NET- oder PHP-Prozess starten.</li><li>System-, Netzwerk- und Paketmanagerbefehle: sichere Beispiele, keine echten OS-Aktionen.</li></ul></article><article><h3>05 · Terminal-Referenz</h3><pre>${escapeHTML(shellHelp(this.currentOS))}</pre></article><article><h3>06 · Tastatur und Datenschutz</h3><p>↑ / ↓ = Verlauf · Tab = Vervollständigung · Ctrl+L = Terminal leeren · Ctrl+S = Editor speichern · Ctrl+Alt+T = neues Terminal.</p><p>Daten liegen ausschließlich im <code>localStorage</code> dieses Browsers und sind pro Betriebssystem getrennt. Import/Export ist über JSON möglich. GitHub Pages benötigt keinen Servercode.</p></article></div>`;
+    w.content.querySelector('.guide-sections').insertAdjacentHTML('beforeend','<article><h3>07 · Diagrammwerkstatt</h3><p>Die Struktogramm-App liest jetzt verschachtelte Python- sowie JavaScript-, Java-, C#- und C++-Blöcke als Programmbaum. Wechsle zwischen <strong>Struktogramm</strong>, <strong>Flussdiagramm</strong> und <strong>UML-Klassen</strong>; UML zeigt erkannte Klassen, Methoden, Eigenschaften, Vererbung und verwendete Klassen. Die Analyse ist lokal und bewusst kein vollständiger Compiler.</p></article>');
     w.content.querySelectorAll('[data-example]').forEach(b=>b.addEventListener('click',()=>this.openTerminalWithCommand(b.dataset.example)));return w;
   }
   openTerminalWithCommand(command){const w=this.openTerminal();const input=$('.terminal-input',w.content);input.value=command;input.focus()}
