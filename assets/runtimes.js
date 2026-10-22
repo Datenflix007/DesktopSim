@@ -52,18 +52,36 @@ function literal(s,vars={}){
   return s;
 }
 function findPrints(code,regex,vars){const result=[];let m;while((m=regex.exec(code))!==null){result.push(String(literal(m[1],vars)));if(result.length>=80)break;}return result}
-// Keine Java-/C#-/PHP-Laufzeit: nur gut sichtbare, begrenzte Ausgabe-Simulation.
+function splitOutputParts(expr,separator){return expr.split(separator).map(part=>part.trim()).filter(Boolean)}
+function findCppPrints(source,vars){const result=[];for(const match of source.matchAll(/(?:std::)?cout\s*<<\s*([^;]+);/g)){const line=splitOutputParts(match[1],/\s*<<\s*/).filter(part=>!/(?:std::)?endl/.test(part)).map(part=>String(literal(part,vars))).join('');if(line)result.push(line)}return result}
+function findCPrints(source,vars){const result=[];for(const match of source.matchAll(/printf\s*\(([^;]+)\)\s*;/g)){const args=splitCSV(match[1]);let format=String(literal(args.shift()||'',vars));for(const value of args)format=format.replace(/%[disfg]/,String(literal(value,vars)));result.push(format.replaceAll('\\n','\n'))}return result}
+function findJavaScriptPrints(source,vars){const result=[];for(const match of source.matchAll(/console\.log\s*\(([^;\n]*)\)\s*;?/g)){result.push(splitCSV(match[1]).map(part=>String(literal(part,vars))).join(' '))}return result}
+export function compileSource(language,source){
+  const languageNames={java:'javac',cpp:'g++',c:'gcc',cs:'dotnet',js:'node',php:'php'};if(!languageNames[language])throw Error('Nicht unterstützte Sprache');
+  const clean=String(source).replace(/\/\*[\s\S]*?\*\//g,'').replace(/\/\/.*$/gm,'').replace(/#.*$/gm,'');let depth=0,quote=null,escaped=false;
+  for(const char of clean){if(quote){if(escaped){escaped=false;continue}if(char==='\\'){escaped=true;continue}if(char===quote)quote=null;continue}if(char==='"'||char==="'"){quote=char;continue}if(char==='{')depth++;if(char==='}')depth--;if(depth<0)return{ok:false,label:languageNames[language],message:'Syntaxfehler: eine schließende geschweifte Klammer hat kein Gegenstück.'};}
+  if(quote)return{ok:false,label:languageNames[language],message:'Syntaxfehler: eine Zeichenkette wurde nicht geschlossen.'};
+  if(depth!==0)return{ok:false,label:languageNames[language],message:'Syntaxfehler: geschweifte Klammern sind nicht ausgeglichen.'};
+  if(['c','cpp'].includes(language)&&!/\bint\s+main\s*\(/.test(clean))return{ok:false,label:languageNames[language],message:'Linkerfehler: Einstiegspunkt int main(...) fehlt.'};
+  if(language==='java'&&!/\bclass\s+[A-Za-z_]\w*/.test(clean))return{ok:false,label:languageNames[language],message:'javac: Fehler: keine Java-Klasse gefunden.'};
+  if(language==='cs'&&!/\b(?:class|record)\s+\w+/.test(clean))return{ok:false,label:languageNames[language],message:'C#: Fehler: keine Klasse gefunden.'};
+  return{ok:true,label:languageNames[language],message:`${languageNames[language]}: Quelltextprüfung erfolgreich (Lernmodus).`};
+}
+// Python läuft über Pyodide. Die übrigen Laufzeiten liefern eine begrenzte, sichtbar markierte Ausgabe-Demo.
 export function simulateCompiled(language,source){
   const configs={
     java:{regex:/System\.out\.println\s*\(([^;\n]*)\)\s*;/g,label:'Java / System.out.println'},
     cs:{regex:/Console\.WriteLine\s*\(([^;\n]*)\)\s*;/g,label:'C# / Console.WriteLine'},
-    php:{regex:/\becho\s+([^;\n]+)\s*;/g,label:'PHP / echo'}
+    php:{regex:/\becho\s+([^;\n]+)\s*;/g,label:'PHP / echo'},
+    js:{regex:/console\.log\s*\(([^;\n]*)\)\s*;?/g,label:'JavaScript / console.log'},
+    cpp:{label:'C++ / std::cout'},c:{label:'C / printf'}
   };const cfg=configs[language];if(!cfg)throw Error('Nicht unterstützte Sprache');
+  const check=compileSource(language,source);if(!check.ok)return{simulation:true,output:'',detail:check.message,error:check.message};
   const vars={};const clean=source.replace(/<\?php/gi,'').replace(/\?>/g,'');
-  const declarations=/(?:^|[;\n])\s*(?:(?:String|string|int|var)\s+|\$)([a-z_]\w*)\s*=\s*([^;\n]+)\s*;/gi;
+  const declarations=/(?:^|[;\n])\s*(?:(?:String|string|int|double|float|char|var|const|let)\s+|\$)([a-z_]\w*)\s*=\s*([^;\n]+)\s*;/gi;
   for(const m of clean.matchAll(declarations))vars[m[1]]=literal(m[2],vars);
-  const lines=findPrints(source,cfg.regex,vars);
-  return{simulation:true,output:lines.length?lines.join('\n'):'[Demo] Keine unterstützte Ausgabefunktion erkannt.',detail:`Ausgabe-Simulator: ${cfg.label}. Kein echter Compiler und keine vollständige Sprachausführung.`};
+  const lines=language==='cpp'?findCppPrints(source,vars):language==='c'?findCPrints(source,vars):language==='js'?findJavaScriptPrints(source,vars):findPrints(source,cfg.regex,vars);
+  return{simulation:true,output:lines.length?lines.join('\n'):'[Demo] Keine unterstützte Ausgabefunktion erkannt.',detail:`${check.message}\nAusgabe-Demo: ${cfg.label}. Kein nativer Compiler und keine vollständige Sprachausführung.`};
 }
 export function simulatePython(source){
   const lines=[];const vars={};const code=source.split('\n');let loop=null;

@@ -1,9 +1,9 @@
 import {getOS,isWindows,homePath,pathDisplay,joinPath} from './vfs.js';
-import {simulateCompiled,simulatePython} from './runtimes.js';
+import {compileSource,simulateCompiled,simulatePython} from './runtimes.js';
 const versions={winxp:'5.1.2600',win7:'6.1.7601',win8:'6.2.9200',win10:'10.0.19045',win11:'10.0.26100'};
 const unixNames={debian:'Linux debian-sim 6.12.0-amd64 x86_64 GNU/Linux',arch:'Linux arch-sim 6.12.0-arch1-1 x86_64 GNU/Linux',macos:'Darwin mac-sim 24.0.0 arm64',unix:'SunOS workstation 5.11 i86pc'};
-const cmdNames=['help','cls','dir','cd','md','mkdir','rd','rmdir','del','erase','copy','move','ren','rename','type','echo','tree','ver','systeminfo','ipconfig','ping','where','whoami','hostname','date','time','set','start','notepad','python','py','java','javac','dotnet','php','sqlite3','curl','history','exit','powershell','cmd','winget'];
-const unixCmds=['help','clear','ls','pwd','cd','mkdir','rmdir','touch','rm','cp','mv','cat','echo','tree','uname','whoami','hostname','date','history','which','find','grep','head','tail','wc','ps','ping','curl','ifconfig','ip','export','printenv','env','open','nano','vim','python','python3','java','javac','dotnet','php','sqlite3','sudo','chmod','man'];
+const cmdNames=['help','cls','dir','cd','md','mkdir','rd','rmdir','del','erase','copy','move','ren','rename','type','echo','tree','ver','systeminfo','ipconfig','ping','where','whoami','hostname','date','time','set','start','notepad','code','ide','git','fun','matrix','party','byte','python','py','java','javac','g++','gcc','clang++','clang','node','dotnet','php','sqlite3','curl','history','exit','powershell','cmd','winget'];
+const unixCmds=['help','clear','ls','pwd','cd','mkdir','rmdir','touch','rm','cp','mv','cat','echo','tree','uname','whoami','hostname','date','history','which','find','grep','head','tail','wc','ps','ping','curl','ifconfig','ip','export','printenv','env','open','nano','vim','code','ide','git','fun','matrix','party','byte','python','python3','java','javac','g++','gcc','clang++','clang','node','dotnet','php','sqlite3','sudo','chmod','man'];
 function tokenize(s){const arr=[];let token='',q=null,esc=false,started=false;for(const c of s){if(esc){token+=c;started=true;esc=false;continue}if(q){if(c===q){q=null}else token+=c;continue}if(c==='"'||c==="'"){q=c;started=true;continue}if(/\s/.test(c)){if(started){arr.push(token);token='';started=false}continue}token+=c;started=true;}if(started)arr.push(token);return arr;}
 const basename=p=>p.replaceAll('\\','/').split('/').pop();
 const table = (columns, rows) => {
@@ -17,7 +17,12 @@ export function shellHelp(id){return isWindows(id)?`EINGABEAUFFORDERUNG · ${get
 Dateien           dir, cd, md, rd, del, copy, move, ren, type, tree
 System            ver, systeminfo, ipconfig, ping, whoami, hostname
 Bearbeitung       notepad <datei>, echo Text > <datei>
-Programmieren     python hello.py, javac Main.java, java Main
+IDE               code <datei> oder ide <datei> (VS-Code-Arbeitsplatz)
+Git               git status, git add <datei>, git commit -m "Text", git graph
+Spielereien       fun, matrix, party, byte
+Programmieren     python hello.py [Pyodide], javac Main.java && java Main
+                  g++ main.cpp -o hallo && hallo.exe
+                  gcc hello.c -o hallo && hallo.exe, node hello.js
                   dotnet run Program.cs, php index.php
 Webserver         python -m http.server 8000, curl localhost:8000
 Datenbank         sqlite3 demo.db  →  SELECT * FROM schueler;
@@ -31,7 +36,12 @@ Navigation        pwd, ls -la, cd, mkdir, rmdir, tree
 Dateien           touch, cat, cp, mv, rm, head, tail, grep, find
 System            uname -a, whoami, hostname, date, ps, ifconfig
 Editor            nano <datei>, vim <datei>
-Programmieren     python3 hello.py, javac Main.java, java Main
+IDE               code <datei> oder ide <datei> (VS-Code-Arbeitsplatz)
+Git               git status, git add <datei>, git commit -m "Text", git graph
+Spielereien       fun, matrix, party, byte
+Programmieren     python3 hello.py [Pyodide], javac Main.java && java Main
+                  g++ main.cpp -o hallo && ./hallo
+                  gcc hello.c -o hallo && ./hallo, node hello.js
                   dotnet run Program.cs, php index.php
 Webserver         python3 -m http.server 8000, curl localhost:8000
 Datenbank         sqlite3 demo.db  →  SELECT * FROM schueler;
@@ -39,7 +49,7 @@ Pakete            ${id==='debian'?'apt / apt-get':id==='arch'?'pacman':id==='mac
 Konsole           clear, history, help, exit
 
 Tipp: Alle Übungen liegen in ~/Projects.
-Nur Simulation · keine echten Systemeingriffe.`;}
+Python nutzt eine echte WebAssembly-Laufzeit. Java/C/C++/C#/PHP/Node prüfen Quelltext und zeigen eine begrenzte Ausgabe-Demo – kein nativer Compiler.`;}
 export function promptFor(t){if(t.sqlMode)return 'sqlite> ';const path=pathDisplay(t.os,t.cwd);if(isWindows(t.os))return(t.shell==='powershell'?'PS ':'')+path+'>';const host=t.os==='macos'?'Mac':t.os==='arch'?'arch':t.os==='unix'?'workstation':'debian';const pretty=path.startsWith(homePath(t.os))?'~'+path.slice(homePath(t.os).length):path;return t.os==='macos'?`student@${host} ${pretty} % `:`student@${host}:${pretty}${t.admin?'#':'$'} `;}
 export class TerminalEngine{
   constructor(app){this.app=app}
@@ -124,7 +134,13 @@ export class TerminalEngine{
       const valid=command.startsWith('apt')&&os==='debian'||command==='pacman'&&os==='arch'||command==='brew'&&os==='macos'||command==='winget'&&['win10','win11'].includes(os)||command==='pkginfo'&&os==='unix';
       return valid?`[Paketmanager-Demo] ${command} ${arg}\nKeine echte Installation: GitHub Pages stellt keinen Paketmanager bereit.`:`${command}: auf ${getOS(os).label} nicht verfügbar.`;
     }
-    if(['nano','vim','vi','notepad','code','edit'].includes(command)){this.app.openEditor(arg||'hello.py',t.cwd);return'Editor geöffnet: '+(arg||'hello.py')}
+    if(['nano','vim','vi','notepad','edit'].includes(command)){this.app.openEditor(arg||'hello.py',t.cwd);return'Editor geöffnet: '+(arg||'hello.py')}
+    if(['ide','code'].includes(command)){this.app.openIDE(arg||'hello.py',t.cwd);return'IDE geöffnet: '+(arg||'hello.py')}
+    if(command==='git')return this.gitCommand(args,t);
+    if(command==='fun'){this.app.openFunLab?.();return'Fun Lab geöffnet.'}
+    if(command==='matrix'){this.app.startMatrix?.();return'Matrix-Modus aktiv. Mit Esc beenden.'}
+    if(command==='party'){this.app.launchConfetti?.();return'Party-Modus gestartet ✨'}
+    if(command==='byte'){const active=this.app.toggleByte?.();return active?'Byte ist auf dem Desktop. Klicke ihn an!':'Byte macht eine Pause.'}
     if(command==='start'||command==='open'){
       const path=arg||'.';if(/\.html?$/i.test(path)){this.app.openBrowser(path,t.cwd);return'HTML-Vorschau geöffnet.'}
       if(fs.locate(path,t.cwd)?.type==='dir'){this.app.openFiles(fs.normalize(path,t.cwd));return'Dateimanager geöffnet.'}
@@ -135,8 +151,16 @@ export class TerminalEngine{
       if(!args[0]||args[0]==='--version'||args[0]==='-V')return'Python 3 (Pyodide / WebAssembly bei Verbindung; sonst eingeschränkte Demo)';
       try{const code=fs.read(args[0],t.cwd);return await this.runPython(code)}catch(e){return'Fehler: '+e.message}
     }
-    if(command==='javac'){if(!arg)return'Usage: javac <datei.java>';try{fs.read(arg,t.cwd);t.compiled=arg;return`[Java-Demo] ${basename(arg)} geprüft. Kein echter Java-Compiler.`}catch(e){return'Fehler: '+e.message}}
-    if(command==='java'){const file=args[0]?.endsWith('.java')?args[0]:(args[0]||'Main')+'.java';try{return this.compiled('java',fs.read(file,t.cwd))}catch(e){return'Fehler: '+e.message}}
+    const artifact=this.findArtifact(command,t);if(artifact)return this.compiled(artifact.language,artifact.source);
+    if(command==='javac')return this.compileArtifact('java',args.find(a=>/\.java$/i.test(a)),args,t);
+    if(['g++','clang++'].includes(command))return this.compileArtifact('cpp',args.find(a=>/\.(?:cpp|cc|cxx)$/i.test(a)),args,t);
+    if(['gcc','clang'].includes(command))return this.compileArtifact('c',args.find(a=>/\.c$/i.test(a)),args,t);
+    if(command==='java'){
+      const className=(args[0]||'Main').replace(/\.java$/i,'');const artifact=t.artifacts?.get('java:'+className.toLowerCase());
+      if(!artifact)return`java: Klasse ${className} wurde in diesem Terminal noch nicht gebaut.\nNutze zuerst: javac ${className}.java`;
+      return this.compiled('java',artifact.source);
+    }
+    if(command==='node'){const file=args.find(a=>/\.(?:js|mjs)$/i.test(a))||'hello.js';try{return this.compiled('js',fs.read(file,t.cwd))}catch(e){return'Fehler: '+e.message}}
     if(command==='dotnet'){const file=args.find(a=>a.toLowerCase().endsWith('.cs'))||'Program.cs';try{return this.compiled('cs',fs.read(file,t.cwd))}catch(e){return'Fehler: '+e.message}}
     if(command==='php'){
       if(args[0]==='-S')return this.startServer(args[1]?.split(':').pop()||'8000',t);
@@ -151,7 +175,37 @@ export class TerminalEngine{
     }
     return win?`'${parts[0]}' ist entweder falsch geschrieben oder konnte nicht gefunden werden.\nNutze "help" für unterstützte Befehle.`:`${t.shell}: command not found: ${parts[0]}\nNutze "help" für unterstützte Befehle.`;
   }
-  compiled(lang,src){const result=simulateCompiled(lang,src);return(result.output||'')+'\n\n['+result.detail+']'}
+  compileArtifact(language,file,args,t){
+    if(!file)return`Usage: ${language==='java'?'javac <datei.java>':language==='cpp'?'g++ <datei.cpp> [-o programm]':'gcc <datei.c> [-o programm]'}`;
+    try{
+      const source=this.app.fs.read(file,t.cwd),check=compileSource(language,source);if(!check.ok)return check.message;
+      const sourceBase=basename(file).replace(/\.[^.]+$/,'');const outputAt=args.findIndex(arg=>arg==='-o');let target=outputAt>=0?args[outputAt+1]:sourceBase;
+      if(outputAt>=0&&!target)return`${check.label}: Fehler: Nach -o fehlt ein Programmname.`;
+      t.artifacts??=new Map();
+      if(language==='java'){const className=source.match(/\bclass\s+([A-Za-z_]\w*)/)?.[1]||sourceBase;t.artifacts.set('java:'+className.toLowerCase(),{language,source});return`${check.message}\nVirtuelle Klassendatei ${className}.class bereit.\nAusführen: java ${className}\nHinweis: GitHub Pages kann kein natives javac starten; die Ausgabe wird im Lernmodus ausgewertet.`}
+      target=String(target).replaceAll('\\','/').replace(/^\.\//,'').replace(/\.exe$/i,'')||sourceBase;t.artifacts.set(target.toLowerCase(),{language,source});
+      const run=isWindows(t.os)?target+'.exe':'./'+target;return`${check.message}\nVirtuelles Build-Artefakt ${isWindows(t.os)?target+'.exe':target} bereit.\nAusführen: ${run}\nHinweis: Die Ausführung zeigt eine begrenzte Ausgabe-Demo, keinen nativen ${check.label}-Prozess.`;
+    }catch(e){return'Fehler: '+e.message}
+  }
+  gitCommand(args,t){
+    const repo=this.app.git,sub=(args[0]||'status').toLowerCase(),rest=args.slice(1);
+    if(!repo)return'Git-Lernumgebung ist nicht verfügbar.';
+    try{
+      if(sub==='status'){const status=repo.status();return`On branch ${status.branch}\n${status.staged.length?`Changes to be committed:\n${status.staged.map(file=>'  new file:   '+file).join('\n')}`:'nothing to commit, working tree clean'}\n\n[Lokale Git-Lernsimulation · keine Remote-Verbindung]`;}
+      if(sub==='add'){const count=repo.stage(rest,t.fs??this.app.fs,t.cwd);return`${count} Datei(en) zur Staging-Area hinzugefügt.`;}
+      if(sub==='restore'&&rest[0]==='--staged'){if(!rest[1])return'Usage: git restore --staged <datei>';repo.unstage(rest[1]);return rest[1]+' aus der Staging-Area entfernt.';}
+      if(sub==='commit'){const messageIndex=rest.indexOf('-m');if(messageIndex<0)return'Usage: git commit -m "Nachricht"';const commit=repo.commit(rest.slice(messageIndex+1).join(' '));return`[${repo.status().branch} ${commit.id}] ${commit.message}\n ${commit.files.length} file(s) changed`;}
+      if(sub==='log'){const oneLine=rest.includes('--oneline');return repo.log().map(commit=>oneLine?`${commit.id} ${commit.message}`:`commit ${commit.id}\nAuthor: ${commit.author}\nDate:   ${new Date(commit.time).toLocaleString('de-DE')}\n\n    ${commit.message}`).join('\n\n');}
+      if(sub==='branch'){if(!rest[0])return repo.branchNames().map(branch=>(branch===repo.status().branch?'* ':'  ')+branch).join('\n');const branch=repo.createBranch(rest[0]);return`Branch '${branch}' erstellt.`;}
+      if(sub==='switch'||sub==='checkout'){if(!rest[0])return`Usage: git ${sub} <branch>`;const branch=repo.switchBranch(rest[0]);return`Zu Branch '${branch}' gewechselt.`;}
+      if(sub==='diff'){const staged=repo.status().staged;return staged.length?staged.map(file=>`diff --git a/${file} b/${file}\n+ Lernänderung für ${file} bereit zum Commit`).join('\n\n'):'Keine gestagten Änderungen.';}
+      if(sub==='graph'||sub==='gui'){this.app.openGitGraph?.();return'Git Graph geöffnet.';}
+      if(sub==='init')return'Repository bereits als lokale DesktopSim-Lernsimulation initialisiert.';
+      return'Git-Lernbefehle: status, add, restore --staged, commit -m, log --oneline, branch, switch, diff, graph';
+    }catch(error){return'git: '+error.message}
+  }
+  findArtifact(command,t){const key=String(command).replaceAll('\\','/').replace(/^\.\//,'').replace(/\.exe$/i,'').toLowerCase();return t.artifacts?.get(key)}
+  compiled(lang,src){const result=simulateCompiled(lang,src);return result.error?result.detail:(result.output||'')+'\n\n['+result.detail+']'}
   async runPython(code){try{const result=await this.app.python.run(code);return result||'[Python ausgeführt · keine Ausgabe]'}catch(e){const demo=simulatePython(code);return`Pyodide konnte nicht gestartet werden: ${e.message}\n${demo.detail}\n${demo.output}`}}
   startServer(port,t){if(!/^\d{2,5}$/.test(port)||+port>65535)return'Ungültiger Port';this.app.servers.set(port,{cwd:t.cwd,os:t.os});this.app.toast(`Virtueller Webserver auf localhost:${port} gestartet`);return`Serving HTTP on localhost port ${port} (virtuell) ...\nÖffne den DesktopSim-Browser und rufe http://localhost:${port} auf.\nKein echter TCP-Port wird geöffnet.`}
 }
