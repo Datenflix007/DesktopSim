@@ -1,19 +1,27 @@
 // Serverlose postMessage-Bridge für die ER-Lab-Einbettung.
 const cleanOrigin=value=>{try{return new URL(value,location.href).origin}catch{return null}};
+const fieldName=value=>String(typeof value==='object'&&value?value.name||'attribut':value||'attribut').replace(/\s*\((?:PK|FK)\)\s*/gi,'').trim().replace(/[^\w]/g,'_');
+const erTables=diagram=>{
+  if(diagram?.tables&&typeof diagram.tables==='object')return structuredClone(diagram.tables);
+  const tables={};for(const entity of diagram?.entities||[]){const columns=(entity.attrs||[]).map(fieldName).filter(Boolean);for(const relation of diagram.relations||[])if(relation.to===entity.id){const fk=`${relation.from}_id`;if(!columns.includes(fk))columns.push(fk);}tables[entity.id]={columns,rows:structuredClone(diagram.rows?.[entity.id]||[]),label:entity.name||entity.id};}return tables;
+};
+const rowsBackToER=(diagram,tables)=>{if(!diagram?.entities)return diagram;diagram.rows??={};for(const entity of diagram.entities){const entry=Object.entries(tables).find(([key,value])=>key===entity.id||value.label===entity.name);if(entry)diagram.rows[entity.id]=structuredClone(entry[1].rows||[]);}return diagram;};
 
 export class ERLabClient {
   constructor({getFallbackDB, onState}={}){this.getFallbackDB=getFallbackDB;this.onState=onState;this.frame=null;this.pending=new Map();this.serial=0;this.listeners=new Set();this.key='desktopsim-v2-erlab-state';this.diagram=this.read();window.addEventListener('message',event=>this.receive(event));}
   read(){try{return JSON.parse(localStorage.getItem(this.key))||null}catch{return null}}
-  setOS(os){this.key=`desktopsim-v2-erlab-state-${os}`;this.diagram=this.read()||this.diagramFromDB();}
+  setOS(os){this.key=`desktopsim-v2-erlab-state-${os}`;const saved=this.read();this.hasPersisted=Boolean(saved);this.diagram=saved||this.diagramFromDB();}
   diagramFromDB(){return {tables:structuredClone(this.getFallbackDB?.()?.tables||{})};}
-  save(diagram){this.diagram=structuredClone(diagram);try{localStorage.setItem(this.key,JSON.stringify(this.diagram))}catch{}this.listeners.forEach(fn=>fn(this.diagram));this.onState?.(this.diagram);}
+  tables(){return erTables(this.diagram||this.diagramFromDB());}
+  save(diagram){this.diagram=structuredClone(diagram);this.hasPersisted=true;const db=this.getFallbackDB?.();if(db){db.tables=this.tables();db.save?.();}try{localStorage.setItem(this.key,JSON.stringify(this.diagram))}catch{}this.listeners.forEach(fn=>fn(this.diagram));this.onState?.(this.diagram);}
   subscribe(fn){this.listeners.add(fn);return()=>this.listeners.delete(fn)}
   attach(frame){this.frame=frame;frame.addEventListener('load',()=>this.load());}
   origin(){return cleanOrigin(this.frame?.src)||location.origin}
   post(message){if(!this.frame?.contentWindow)return false;this.frame.contentWindow.postMessage(message,this.origin());return true}
-  load(){const diagram=this.diagram||this.diagramFromDB();this.save(diagram);this.post({type:'erlab:load',diagram});}
+  load(){if(!this.hasPersisted){this.requestState();return;}this.post({type:'erlab:load',diagram:this.diagram||this.diagramFromDB()});}
+  requestState(){const requestId=`state-${++this.serial}`;this.post({type:'erlab:getState',requestId});return requestId}
   async sql(sql){if(!this.frame?.contentWindow)return this.localSQL(sql,'ER Lab ist noch nicht eingebettet – lokale Lernkopie verwendet.');const requestId=`sql-${Date.now()}-${++this.serial}`;return new Promise(resolve=>{const timer=setTimeout(()=>{this.pending.delete(requestId);resolve(this.localSQL(sql,'ER Lab antwortet nicht – lokale Lernkopie verwendet.'));},2500);this.pending.set(requestId,{resolve,timer});this.post({type:'erlab:sql',requestId,sql});});}
-  localSQL(sql,note=''){try{const raw=this.getFallbackDB().run(sql);return {columns:raw.columns||[],rows:raw.rows||[],affectedRows:raw.affectedRows??(/eingefügt|aktualisiert|gelöscht/i.test(raw.message||'')?Number((raw.message||'').match(/\d+/)?.[0]||0):0),error:null,message:[note,raw.message].filter(Boolean).join(' ')};}catch(error){return {columns:[],rows:[],affectedRows:0,error:error.message,message:note};}}
+  localSQL(sql,note=''){try{const raw=this.getFallbackDB().run(sql);if(this.diagram?.entities){rowsBackToER(this.diagram,this.getFallbackDB().tables);this.save(this.diagram);}return {columns:raw.columns||[],rows:raw.rows||[],affectedRows:raw.affectedRows??(/eingefügt|aktualisiert|gelöscht/i.test(raw.message||'')?Number((raw.message||'').match(/\d+/)?.[0]||0):0),error:null,message:[note,raw.message].filter(Boolean).join(' ')};}catch(error){return {columns:[],rows:[],affectedRows:0,error:error.message,message:note};}}
   receive(event){if(event.source!==this.frame?.contentWindow||event.origin!==this.origin())return;const data=event.data;if(!data||typeof data.type!=='string')return;if(data.type==='erlab:state'&&data.diagram)this.save(data.diagram);if(data.type==='erlab:sqlResult'&&data.requestId){const pending=this.pending.get(data.requestId);if(!pending)return;clearTimeout(pending.timer);this.pending.delete(data.requestId);pending.resolve(data.result||{columns:[],rows:[],affectedRows:0,error:'Ungültige Antwort von ER Lab.'});}}
 }
 
