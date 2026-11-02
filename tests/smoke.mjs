@@ -89,13 +89,13 @@ assert.match(await engine.execute('hallo.exe',compilerWindowsShell),/Hallo aus C
 state.fs.write('broken.cpp','std::cout << "kein Einstieg";',compilerWindowsShell.cwd);
 assert.match(await engine.execute('g++ broken.cpp -o kaputt',compilerWindowsShell),/Einstiegspunkt/,'compiler error feedback');
 const appSource=await readFile(new URL('../assets/app.js',import.meta.url),'utf8');
-const ideHelperSource=appSource.slice(appSource.indexOf('const escapeHTML'),appSource.indexOf('\n\nclass DesktopSim'));
+const ideHelperSource=appSource.slice(appSource.indexOf('const escapeHTML'),appSource.indexOf('class DesktopSim'));
 const highlightIDE=Function(`${ideHelperSource};return ideSyntaxHTML;`)();
 const highlightedPython=highlightIDE('def hallo():\n  # Kommentar\n  print("Hallo")','py');
 assert.match(highlightedPython,/token-keyword[^>]*>def/,'IDE highlights Python keywords');
 assert.match(highlightedPython,/token-comment[^>]*># Kommentar/,'IDE highlights comments');
 assert.match(highlightedPython,/token-string[^>]*>&quot;Hallo&quot;/,'IDE highlights strings safely');
-const structHelperSource=appSource.slice(appSource.indexOf('const STRUCT_LANGUAGES'),appSource.indexOf('\n\nclass DesktopSim'));
+const structHelperSource=appSource.slice(appSource.indexOf('const STRUCT_LANGUAGES'),appSource.indexOf('class DesktopSim'));
 const {parseStructuredCode,structClasses,structCodeFromNodes,structCountNodes}=Function(`${structHelperSource};return {parseStructuredCode,structClasses,structCodeFromNodes,structCountNodes};`)();
 const nestedPython=parseStructuredCode(`class Rechnung:
     def summe(self, werte):
@@ -137,6 +137,20 @@ assert.equal(nestedJavaScript[0].children[0].children[0].children[0].branches.le
 assert.match(structCodeFromNodes(nestedJavaScript,'javascript'),/class PremiumRechnung extends Rechnung/,'class inheritance can be generated again');
 assert.match(appSource,/openStructogram\(\)/,'Struktogramm-App registered');
 assert.match(appSource,/openIDE\(file='hello\.py'/,'IDE-App registered');
+assert.match(appSource,/await this\.erlab\.sql/,'IDE and Workbench use the ER-Lab bridge');
+assert.match(appSource,/db\\\.query/,'IDE recognizes db.query learning calls');
+const bridgeSource=await readFile(new URL('../assets/erlab-bridge.js',import.meta.url),'utf8');
+assert.match(bridgeSource,/erlab:load/,'ER Lab load protocol is available');
+assert.match(bridgeSource,/erlab:getState/,'ER Lab state protocol is available');
+assert.match(bridgeSource,/erlab:sqlResult/,'ER Lab SQL result protocol is available');
+assert.match(bridgeSource,/allowedOrigins/,'ER Lab host checks an origin allowlist');
+const {createERLabSQLExecutor}=await import('../assets/erlab-bridge.js');
+let bridgeDiagram={tables:{Kurs:{columns:['id','titel'],rows:[{id:1,titel:'SQL'}]}}};
+const bridgeSQL=createERLabSQLExecutor({getDiagram:()=>bridgeDiagram,saveDiagram:diagram=>bridgeDiagram=diagram});
+assert.equal(bridgeSQL('SELECT * FROM Kurs').rows.length,1,'ER Lab SQL SELECT');
+assert.equal(bridgeSQL("INSERT INTO Kurs (id, titel) VALUES (2, 'ER')").affectedRows,1,'ER Lab SQL INSERT');
+assert.equal(bridgeSQL("UPDATE Kurs SET titel = 'Bridge' WHERE id = 2").affectedRows,1,'ER Lab SQL UPDATE');
+assert.equal(bridgeSQL('DELETE FROM Kurs WHERE id = 2').affectedRows,1,'ER Lab SQL DELETE');
 assert.match(appSource,/ideSyntaxHTML/,'IDE syntax highlighting layer registered');
 assert.match(appSource,/class="ide-shell"/,'VS-Code-like IDE shell registered');
 assert.match(appSource,/openGitGraph\(\)/,'Git Graph-App registered');
