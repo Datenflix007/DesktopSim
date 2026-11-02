@@ -232,7 +232,7 @@ const structDependencies=(node,classes)=>{
 
 class DesktopSim{
   constructor(){
-    this.desktop=$('#desktop');this.layer=$('#window-layer');this.windows=new Map();this.serial=0;this.z=10;
+    this.app=$('#app');this.desktop=$('#desktop');this.layer=$('#window-layer');this.windows=new Map();this.serial=0;this.z=10;this.focusMode=false;
     this.servers=new Map();this.python=new PythonRuntime();this.currentOS='win11';this.fs=null;this.db=null;this.git=null;this.konami=[];this.erlab=new ERLabClient({getFallbackDB:()=>this.db});
     this.termEngine=new TerminalEngine(this);
     this.bindUI();this.drawOSPicker();
@@ -245,12 +245,16 @@ class DesktopSim{
     $('#close-picker').addEventListener('click',()=>this.hidePicker());
     $('#guide-button').addEventListener('click',()=>this.openGuide());
     $('#export-button').addEventListener('click',()=>this.exportFiles());
+    $('#fullscreen-button').addEventListener('click',()=>this.toggleFullscreen());
     $('#os-picker').addEventListener('click',e=>{if(e.target.id==='os-picker')this.hidePicker()});
     $('#import-input').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{this.fs.import(JSON.parse(await f.text()));this.toast('Dateisystem importiert');this.notifyFiles()}catch(err){alert('Import fehlgeschlagen: '+err.message)}e.target.value=''});
-    document.addEventListener('keydown',e=>{if(e.key==='Escape'){this.stopMatrix();$('#start-menu').classList.add('hidden');return}if((e.ctrlKey||e.metaKey)&&e.altKey&&e.key.toLowerCase()==='t'){e.preventDefault();this.openTerminal()}const sequence=['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];this.konami=[...this.konami,e.key.length===1?e.key.toLowerCase():e.key].slice(-sequence.length);if(sequence.every((key,index)=>this.konami[index]===key)){this.konami=[];this.launchConfetti();this.toast('Konami! Party-Modus aktiviert ✨')}});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'){this.stopMatrix();$('#start-menu').classList.add('hidden');if(this.focusMode&&!document.fullscreenElement)this.setFullscreenMode(false);return}if((e.ctrlKey||e.metaKey)&&e.altKey&&e.key.toLowerCase()==='t'){e.preventDefault();this.openTerminal()}const sequence=['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];this.konami=[...this.konami,e.key.length===1?e.key.toLowerCase():e.key].slice(-sequence.length);if(sequence.every((key,index)=>this.konami[index]===key)){this.konami=[];this.launchConfetti();this.toast('Konami! Party-Modus aktiviert ✨')}});
     this.desktop.addEventListener('pointerdown',e=>{if(!e.target.closest('.start-menu, .start-trigger, .task-launch'))$('#start-menu').classList.add('hidden')});
     window.addEventListener('resize',()=>this.keepInBounds());
+    document.addEventListener('fullscreenchange',()=>this.setFullscreenMode(document.fullscreenElement===this.app));
   }
+  setFullscreenMode(active){this.focusMode=active;this.app.classList.toggle('desktop-fullscreen',active);const button=$('#fullscreen-button');button.title=active?'Vollbild verlassen (Esc)':'Reinen Desktop im Vollbild öffnen';button.innerHTML=active?'⛶ <span>Vollbild verlassen</span>':'⛶ <span>Vollbild</span>';if(active)setTimeout(()=>this.keepInBounds(),50)}
+  async toggleFullscreen(){if(document.fullscreenElement){await document.exitFullscreen();return}try{await this.app.requestFullscreen()}catch{this.setFullscreenMode(!this.focusMode);this.toast(this.focusMode?'Desktop-Fokus aktiv · Esc beendet ihn.':'Desktop-Fokus beendet.')}}
   drawOSPicker(){const groupNames=[...new Set(OS_LIST.map(o=>o.group))];$('#os-grid').innerHTML=groupNames.map(group=>`<div class="os-group"><div class="os-group-label">${escapeHTML(group)}</div><div class="os-options">${OS_LIST.filter(o=>o.group===group).map(o=>`<button class="os-option" data-choice="${o.id}" type="button"><span class="os-option-icon ${o.id}">${escapeHTML(o.symbol)}</span><span class="os-option-body"><strong>${escapeHTML(o.label)}</strong><small>${escapeHTML(o.subtitle)}</small></span><span class="os-option-year">${o.year}</span></button>`).join('')}</div></div>`).join('');$('#os-grid').addEventListener('click',e=>{const el=e.target.closest('[data-choice]');if(!el)return;this.setOS(el.dataset.choice,true);this.hidePicker()})}
   showPicker(){$('#os-picker').classList.remove('hidden');$('#close-picker').hidden=false;$('#os-grid').querySelectorAll('.os-option').forEach(b=>b.classList.toggle('active',b.dataset.choice===this.currentOS))}
   hidePicker(){$('#os-picker').classList.add('hidden')}
