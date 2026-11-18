@@ -1,131 +1,74 @@
-# DekstopSim · Interaktives Betriebssystem-Labor
+# DesktopSim · Betriebssystem-Labor
 
-**Version 1.0** · Statische HTML/CSS/JS-App für GitHub Pages. Keine Installation, kein Buildprozess, kein Tracking.
+Statische HTML/CSS/JS-App für GitHub Pages: neun Betriebssysteme mit originalgetreuer Bedienung, einer echten Shell und **Programmiersprachen, die wirklich laufen** – ohne Installation, ohne Server, ohne Build-Schritt.
 
 ## Starten
 
-1. Den Ordner `DekstopSim/` vollständig in das Hauptverzeichnis deiner GitHub-Pages-Seite übernehmen (z. B. `Datenflix007.github.io/DekstopSim/`).
-2. Committen und pushen. GitHub Pages veröffentlicht die Unterseite anschließend unter `https://datenflix007.github.io/DekstopSim/` **wenn** dieses Repository als GitHub-Pages-Quelle eingerichtet ist.
-3. Den Link auf deiner Hauptseite setzen:
-
-```html
-<a href="/DekstopSim/">DekstopSim – Betriebssystem-Labor</a>
-```
-
-Für eine Projektseite unter `https://USERNAME.github.io/REPO/` statt eines User-Sites-Root den **relativen** Link `./DekstopSim/` benutzen.
-
-Zum lokalen Testen im Ordner *oberhalb* von `DekstopSim/`:
+Den Ordner `DesktopSim/` in die GitHub-Pages-Seite übernehmen und verlinken (`<a href="/DesktopSim/">`). Lokal im Ordner *oberhalb*:
 
 ```bash
-python -m http.server 8080
-# Aufrufen: http://localhost:8080/DekstopSim/
+python -m http.server 8080   # dann http://localhost:8080/DesktopSim/
 ```
 
-ES-Module benötigen einen Webserver; HTML nicht einfach mit `file://` öffnen.
+ES-Module und der Service Worker brauchen `http(s)://` (nicht `file://`). Direktlink zu einem System: `…/DesktopSim/#os=debian` (`winxp`, `win7`, `win8`, `win10`, `win11`, `debian`, `arch`, `macos`, `unix`).
 
-## Betriebssysteme
+## Echte Laufzeiten (WebAssembly, im Browser)
 
-| Oberfläche | Standard-Shell | Beispiele |
+| Sprache | Technik | Download (einmalig, danach im Cache) |
 | --- | --- | --- |
-| Windows XP | CMD | `dir`, `cd`, `type`, `ipconfig`, `ver` |
-| Windows 7 | CMD | `dir`, `tree`, `copy`, `notepad` |
-| Windows 8 | CMD | `mkdir`, `del`, `systeminfo` |
-| Windows 10 | CMD / PowerShell | `powershell`, `Get-ChildItem`, `Get-Content` |
-| Windows 11 | PowerShell / CMD | `Get-Location`, `Set-Location`, `cmd` |
-| Debian | Bash | `ls -la`, `cat`, `apt install` (Simulation) |
-| Arch | Bash | `ls`, `pacman -S` (Simulation) |
-| macOS | Zsh | `ls`, `open`, `brew install` (Simulation) |
-| Unix / CDE | sh | `uname -a`, `ps`, `pkginfo` (Simulation) |
+| Python 3.14 | Pyodide; `input()`, Dateizugriff, `pip install`, Matplotlib-Grafiken | ≈ 10 MB |
+| JavaScript | Browser-Engine im Worker; `console`, `prompt()`, `require('fs')`, `readline`, Node-REPL | – |
+| C / C++ | Clang/LLVM 22 (YoWASP) → WASI-Programm, eigener WASI-Lader | ≈ 100 MB |
+| Java 8 | echtes `javac` (OpenJDK tools.jar) + CheerpJ-JVM, interaktiver `Scanner` | ≈ 30 MB |
+| PHP 8.4 | php-wasm, auch als `php -S localhost:8000` mit GET/POST | ≈ 13 MB |
+| SQLite 3 | sql.js, Datenbanken in IndexedDB | ≈ 1 MB |
+| C# | nur Ausgabe-Demo (keine .NET-Laufzeit im Browser) | – |
 
-Oberflächen sind **stilistische Lernnachbildungen**, keine pixelgenauen Kopien der Markenoberflächen. Es werden keine proprietären OS-Assets ausgeliefert.
+**Interaktive Eingabe:** Programme laufen in Web Workern. Liest ein Programm von stdin, blockiert es per synchronem XHR auf `__ds_io__/read`; der Service Worker (`sw.js`) beantwortet die Anfrage, sobald das Terminal eine Zeile liefert. Das funktioniert auf GitHub Pages ohne `SharedArrayBuffer`/COOP/COEP. Derselbe Service Worker cached die großen Laufzeit-Downloads dauerhaft.
 
-## Eingebaute Apps
+**Grenzen:** C++-Exceptions (`throw`/`try`) sind im verwendeten Sysroot nicht verfügbar (`-fno-exceptions`), keine Threads. Java-Programme lassen sich mit Strg+C nur abkoppeln, nicht hart beenden. Ohne Internet beim ersten Start greifen vereinfachte Offline-Fallbacks (`assets/runtimes.js`).
 
-- **Terminal:** beliebig viele Fenster, eigene Arbeitsverzeichnisse und Kommandoverläufe, Tab-Vervollständigung, getrennte Prompts, Eingabehilfe.
-- **Dateimanager:** virtuelle Ordner und Dateien, erstellen, löschen, öffnen, als Text herunterladen.
-- **Editor:** Python, HTML, SQL, Java, C, C++, JavaScript, C# und PHP editieren; `Ctrl+S` speichern; **Ausführen**-Schaltfläche.
-- **IDE:** VS-Code-ähnlicher Arbeitsplatz mit Projekt-Explorer, Datei-Tab, Ausgabefenster, Statusleiste und lokalem Syntax-Highlighting für die vorhandenen Lernsprachen. Über das Desktop-Icon oder mit `ide <datei>` bzw. `code <datei>` im Terminal starten; `Ctrl+S` speichert, `Ctrl+Enter` führt aus.
-- **Git Graph:** lokale Lernansicht für Commit-Historie, Branches und Staging-Area. Dateien stagen, Branches anlegen/wechseln und Commits erzeugen; erreichbar über das Desktop-Icon sowie `git graph`, `git status`, `git add`, `git commit -m`, `git branch` und `git switch`.
-- **Fun Lab:** rein lokale Spielereien für zwischendurch: Matrix-Bildschirmschoner (`matrix`, mit `Esc` beenden), Konfetti (`party`) und der klickbare Desktop-Begleiter Byte (`byte`). Über **Fun Lab** oder als Konami-Easter-Egg `↑ ↑ ↓ ↓ ← → ← → B A` erreichbar.
-- **Struktogramm & Diagramme:** Lokale Analyse von Python, JavaScript, Java, C# und C++ mit verschachtelten Bedingungen, Schleifen, Funktionen und Klassen. Der erkannte Programmbaum lässt sich als bearbeitbares Struktogramm, Flussdiagramm oder UML-Klassendiagramm (Klassen, Attribute, Methoden, Vererbung und erkannte Nutzung) anzeigen und wieder als Code in den Editor übertragen. Die Analyse ist absichtlich kein vollständiger Compiler.
-- **OS-Spiel:** Ein vollständig lokaler Spieleslot, der sich mit dem System ändert: Klondike-Solitaire unter Windows XP, Minesweeper unter Windows 7–11, Tux-Snake unter Debian/Arch/Unix sowie Drei gewinnt unter macOS.
-- **Browser:** HTML/CSS und JavaScript werden in einem abgeschotteten `iframe sandbox="allow-scripts"` gerendert. `localhost` wird innerhalb der App emuliert. Auf Wunsch lädt der Browser außerdem ausschließlich `https://datenflix007.github.io/` in einem getrennten iframe, sodass dessen Seiten im Fenster weitergeklickt werden können.
-- **SQL Studio:** Datenbanktabellen, SELECT, WHERE, ORDER BY, LIMIT, COUNT, INSERT, UPDATE, DELETE, CREATE/DROP TABLE. **Eigene Lernengine, kein vollumfängliches SQLite.**
-- **Lernhilfe:** OS-spezifische Beispiele, Erklärung der Grenzen.
+**Lizenzen/Dienste:** Pyodide (MPL-2.0), YoWASP Clang (ISC/Apache-2.0 LLVM), php-wasm (Apache-2.0/PHP), sql.js (MIT), CheerpJ Community Edition (kostenlos für private und schulische Nutzung, „Built with CheerpJ“), `tools.jar` aus OpenJDK 8 (GPLv2+CE) über das öffentliche JavaFiddle-Repository. Code der Nutzer wird nicht an Server gesendet.
 
-## Sprachen und technische Grenzen
+## Shell
 
-| Fähigkeit | Technische Umsetzung |
-| --- | --- |
-| Dateisystem | Virtuelle JavaScript-Struktur, isoliert nach Betriebssystem, mit `localStorage` |
-| Windows/Linux/macOS/Unix-Kommandos | JS-Befehls-Emulator (nur dokumentierter Teilumfang) |
-| HTML/CSS/JavaScript | Echter Browser-Renderer / JS im isolierten iframe |
-| Python | Echtes Pyodide (WebAssembly) in einem **Web Worker**, per CDN beim ersten Start; begrenzte Offline-Demo wenn CDN nicht erreichbar |
-| Java | `javac Main.java` prüft den Quelltext und erstellt ein virtuelles Lern-Artefakt; `java Main` zeigt eine begrenzte `System.out.println`-Ausgabe. Kein JVM oder nativer Compiler |
-| C / C++ | `gcc hello.c -o hallo` und `g++ main.cpp -o hallo` prüfen typische Einstiegsfehler, legen ein virtuelles Lern-Artefakt an und erlauben `./hallo` bzw. `hallo.exe`. Kein nativer GCC-/Clang-Prozess |
-| JavaScript | `node hello.js` zeigt eine begrenzte `console.log`-Ausgabe; HTML-Dateien laufen weiterhin isoliert im Browser-iframe |
-| C# | Simulierte `Console.WriteLine`-Ausgaben, keine .NET-Runtime |
-| PHP | Simulierte `echo`-Ausgaben, kein echter PHP-Interpreter |
-| SQL | Implementierter CRUD-Teilumfang in JavaScript mit persistenter In-Memory-Datenbank |
-| Git | Persistente Browser-Lernsimulation für lokale Commits, Staging und Branches; keine echten Repository-Dateien, Remotes, Pushes oder Git-Prozesse |
-| `python -m http.server`, `php -S`, `curl localhost` | Virtueller Server-Router **innerhalb der Anwendung**; keine echten Listener oder Netzwerkports |
-| `ping`, `ipconfig`, `apt`, `pacman`, `brew` | Exemplarische Ausgaben; kein echter Hardware-, Netzwerk- oder Paketmanagerzugriff |
+Bash (Debian/Arch), Zsh (macOS), sh (Unix), CMD und PowerShell (Windows) mit gemeinsamem Parser:
 
-Python ist die einzige integrierte vollwertige Programmiersprachen-Runtime und benötigt beim ersten Start eine Internetverbindung zu **jsDelivr/Pyodide**. Alle übrigen Kernfunktionen benötigen keine externen CDNs. Die Python-Ausführung hat bewusst **keinen Schreibzugriff auf das virtuelle JS-Dateisystem** (der Quelltext wird an den Worker übergeben). Durch „Stop Python“ kann ein festhängender Worker beendet werden. Für eine echte JVM, .NET oder serverseitiges PHP wäre ein Backend oder viel umfangreicheres WebAssembly-Bundle nötig, was GitHub Pages nicht von sich aus bereitstellt.
+- Pipes, `>`/`>>`/`<`/`2>`/`2>&1`, `&&`, `||`, `;`, Variablen, `$(…)`, `$((…))`, Wildcards, Exitcodes (`$?`, `%ERRORLEVEL%`)
+- Skripte: `if`/`for`/`while`, `chmod +x skript.sh && ./skript.sh` (inkl. „Keine Berechtigung“), Batch-Dateien (`set /p`, `if exist`, `goto`, `pause`), PowerShell-Skripte samt Ausführungsrichtlinie
+- über 150 Befehle (u. a. `ls`, `grep`, `sort`, `uniq`, `cut`, `sed`, `find`, `tree`, `ps`, `top`, `df`, `ping`, `curl`, `man`, `neofetch`; `dir`, `findstr`, `tasklist`, `taskkill`, `ipconfig /all`; `Get-ChildItem`, `Write-Host`, `Read-Host` …)
+- `sudo` mit Passwortabfrage, Paketmanager (`apt`, `pacman`, `brew`, `winget`) mit realistischer Ausgabe; Spaßpakete (`cowsay`, `sl`, `fortune`, `lolcat`, `fastfetch`) werden erst nach der Installation verfügbar
+- deutsche Systemmeldungen wie auf einem deutsch eingestellten Rechner
 
-## Daten / Datenschutz
+## Oberflächen
 
-- Die Beispieldateien sind lokal im Code gebündelt; Veränderungen werden im `localStorage` des **jeweiligen** Browsers gespeichert.
-- SQL-Lerndaten bleiben pro Betriebssystem getrennt im `localStorage`.
-- Kein Login, keine Telemetrie und keine Backend-Datenübertragung. **Ausnahme:** Auf Abruf wird Pyodide vom CDN heruntergeladen; die ausdrücklich ausgewählte Datenflix-Seite wird über GitHub Pages geladen.
-- Backup: Button **Export** im Header (JSON). **Import** im Startmenü. Import ist an das ursprüngliche simulierte OS gebunden.
-- Virtuelle Nutzerdaten werden mit **Zurücksetzen** gelöscht; bei einem Browser-Cache-Reset können sie ebenfalls verloren gehen.
-- Die HTML-Vorschau ist ein eingeschränktes Sandbox-iframe ohne `allow-same-origin`; HTML und JS fremder Autoren trotzdem nur nach sorgfältiger Prüfung verwenden.
+Startseite → Boot (BIOS/GRUB/Logo) → Anmeldung/Sperrbildschirm → Desktop. Je System eigene Fensterrahmen, Startmenüs (XP zweispaltig, 7 mit Suche, 8 Startbildschirm, 10 mit Kacheln, 11 zentriert), GNOME-Aktivitäten, KDE-Kickoff, macOS-Menüleiste/Dock/Launchpad/Spotlight, CDE-Frontpanel mit vier Arbeitsbereichen. Fenster: Größe an allen Kanten, Andocken mit Vorschau, Snap-Layouts (11), Minimieren-Animation, Übersicht (Strg+Alt+O). Desktop-Symbole verschiebbar, Mehrfachauswahl, Kontextmenüs, Papierkorb mit Wiederherstellen.
+
+Apps: Terminal (Windows-Terminal mit Tabs unter 11), Dateimanager (Explorer/Finder/Nautilus/Dolphin/dtfile, Drag & Drop, Upload/Download), Editor, IDE mit integriertem Terminal, Browser (localhost, `file://`, datenflix007.github.io), Einstellungen, Task-Manager, Rechner, SQL Studio, Git Graph, Struktogramm-Werkstatt, OS-Spiele, Fun Lab, Anleitung.
+
+Tastenkürzel: Strg+Esc Startmenü/Aktivitäten · Strg+Alt+T Terminal · Strg+Umschalt+Esc Task-Manager · Strg+Alt+D Desktop · Strg+Leertaste Spotlight (macOS).
+
+Alle Oberflächen sind eigene Nachbildungen; es werden keine originalen Betriebssystem-Dateien oder Logos ausgeliefert.
+
+## Daten
+
+`localStorage` (Dateisystem, Einstellungen, Pakete, Git) und IndexedDB (kompilierte Programme, SQLite-Datenbanken), getrennt je System. Sicherung/Wiederherstellung über Einstellungen → Speicher.
 
 ## Ordnerstruktur
 
 ```text
-DekstopSim/
-├── .nojekyll
-├── index.html
-├── README.md
-└── assets/
-    ├── styles.css
-    ├── app.js                # UI / Fenstermanager
-    ├── vfs.js                # OS-Profile / virtuelle Dateien
-    ├── terminal.js           # OS-spezifischer Kommando-Emulator
-    ├── runtimes.js           # SQL-Lernengine / Runtime-Verwaltung
-    ├── python-worker.js      # Python via Pyodide im Worker
-    └── favicon.svg
+DesktopSim/
+├── index.html            Startseite + Desktop-Gerüst
+├── sw.js                 Service Worker: stdin-Brücke + Laufzeit-Cache
+├── assets/
+│   ├── app.js            Kern: Start/Boot, Fenstermanager, Desktop
+│   ├── terminal.js       Shell-Engine (Bash/Zsh/sh, CMD, PowerShell)
+│   ├── shell/            Parser und Programme (Sprachen, Paketmanager, Netzwerk)
+│   ├── runtime/          Worker für Python, JS, Clang, WASI, PHP; Java (CheerpJ); SQLite
+│   ├── ui/               OS-Oberflächen, Terminalansicht, Symbole, Profile
+│   ├── apps/             Terminal, Dateien, Editor/IDE, Browser, Systemprogramme, klassische Apps
+│   ├── vfs.js            virtuelles Dateisystem
+│   ├── os-shell.css      Systemoberflächen   ·   os-apps.css   App-Inhalte
+│   └── styles.css        Stile der klassischen Apps
+└── tests/smoke.mjs       node tests/smoke.mjs (Node 20+)
 ```
-
-## Beispiel-Übungen
-
-**Windows 11:** `dir` → `code hello.py` → `powershell` → `Get-ChildItem` → `python hello.py` → `g++ main.cpp -o hallo` → `hallo.exe`.
-
-**Debian:** `pwd` → `ls -la` → `cat index.html` → `python3 -m http.server 8000` → Browser `http://localhost:8000`.
-
-**Arch:** `uname -a` → `pacman -S python` (Demoinfo) → `ls` → `g++ main.cpp -o hallo` → `./hallo`.
-
-**SQL:** `sqlite3 demo.db` → `SELECT * FROM schueler;` → `INSERT INTO schueler (name, klasse, punkte) VALUES ('Mira', '9b', 92);` → `SELECT * FROM schueler WHERE punkte >= 90 ORDER BY punkte DESC;` → `.exit`.
-
-**OS-Spiel:** Auf dem jeweiligen Desktop das Icon **OS-Spiel** doppelklicken. Bei Minesweeper markierst du vermutete Minen mit der rechten Maustaste; Tux-Snake lässt sich mit Pfeiltasten oder den sichtbaren Richtungstasten steuern.
-
-## Einbindung in bestehende Webseiten
-
-DesktopSim ist absichtlich als separate HTML-Unterseite aufgebaut und benötigt keine Abhängigkeiten deiner Hauptseite. Einfach den kompletten Ordner kopieren und im Header / Projektbereich darauf verlinken. Relative Asset-Pfade funktionieren auch in einem Unterverzeichnis oder eigenständigen GitHub-Pages-Repository.
-
-## Grenzen und Entwicklungsbedarf
-
-**Nicht** implementiert: echte virtuelle Maschinen/Kernels, vollständige Shell-Parser, Pipes, Jobs/Prozesse, echtes PostgreSQL/MySQL/SQLite, VM-Netzwerk, POSIX-Rechte, Framework-Support oder vollständige Java/.NET/PHP-Ausführung. Der Schwerpunkt liegt auf erkennbaren Oberflächen, grundlegenden Befehlen und niedrigschwelligen Unterrichtsübungen.
-
-## Entwickler-Selbsttest
-
-Ohne NPM-Installation, nur mit Node.js 20+:
-
-```bash
-cd DekstopSim
-node tests/smoke.mjs
-```
-
-Dieser Test prüft alle neun Betriebssystemprofile, typische Befehle, Ordnererstellung, Terminal-SQL, simulierten localhost, SQL-Filter/CRUD, Sprach-Demos, lokale Persistenz sowie die Einbindung von Struktogramm und Browser-Freigabe.

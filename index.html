@@ -3,49 +3,62 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#101629">
-  <meta name="description" content="DesktopSim: Betriebssystem-Oberflächen, Terminal-Befehle und Programmierung im Browser entdecken.">
-  <title>DekstopSim · Interaktives Betriebssystem-Labor</title>
+  <meta name="theme-color" content="#0b1020">
+  <meta name="description" content="DesktopSim: Windows, Linux, macOS und Unix im Browser erleben – mit echter Shell und echten Programmiersprachen (Python, C/C++, Java, JavaScript, PHP, SQLite).">
+  <title>DesktopSim · Betriebssystem-Labor</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/styles.css">
   <link rel="stylesheet" href="assets/diagram.css">
+  <link rel="stylesheet" href="assets/os-shell.css">
+  <link rel="stylesheet" href="assets/os-apps.css">
   <script type="module" src="assets/app.js"></script>
 </head>
-<body>
+<body class="on-landing">
   <div id="app" class="app">
     <header class="top-header">
-      <a class="identity" href="../" title="Zur übergeordneten Webseite">
-        <span class="identity-mark" aria-hidden="true">D<span>_</span></span>
-        <span class="identity-text"><strong>DekstopSim</strong><small>INTERAKTIVES OS-LABOR</small></span>
-      </a>
-      <div class="header-mid" id="header-status">Virtuelle Umgebung · nur im Browser</div>
+      <a class="identity" href="../" title="Zur übergeordneten Webseite"><span class="identity-mark" aria-hidden="true">D<span>_</span></span><span class="identity-text"><strong>DesktopSim</strong><small>BETRIEBSSYSTEM-LABOR</small></span></a>
+      <div class="header-mid" id="header-status"></div>
       <nav class="header-buttons" aria-label="Labor-Steuerung">
-        <button type="button" class="top-action" id="guide-button" title="Anleitung öffnen">? <span>Anleitung</span></button>
-        <button type="button" class="top-action" id="export-button" title="Virtuelles Dateisystem exportieren">⇩ <span>Export</span></button>
-        <button type="button" class="top-action prominent" id="change-os">⇄ <span>System wählen</span></button>
+        <button type="button" class="top-action" id="guide-button" title="Anleitung">? <span>Anleitung</span></button>
+        <button type="button" class="top-action" id="fullscreen-button" title="Vollbild">⛶ <span>Vollbild</span></button>
+        <button type="button" class="top-action prominent" id="change-os">⇄ <span>System wechseln</span></button>
       </nav>
     </header>
     <main class="desktop-stage">
-      <div id="desktop" class="desktop" data-os="win11" aria-label="Simulierter Desktop">
-        <div class="wallpaper-decoration" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-        <div id="mac-menu" class="mac-menu" hidden></div>
+      <div id="desktop" class="desktop" aria-label="Simulierter Desktop">
+        <div class="wallpaper" aria-hidden="true"><span></span><span></span><span></span></div>
         <div id="desktop-icons" class="desktop-icons"></div>
-        <div id="window-layer" class="window-layer" aria-live="off"></div>
-        <div id="start-menu" class="start-menu hidden"></div>
-        <div id="taskbar" class="taskbar"></div>
-        <div id="desktop-notice" class="desktop-notice" aria-live="polite"></div>
+        <div id="window-layer" class="window-layer"></div>
+        <div id="shell-ui" class="shell-ui"></div>
+        <div id="overlay-layer" class="overlay-layer"></div>
+        <div id="system-screen" class="system-screen" hidden></div>
       </div>
     </main>
-    <footer class="footnote"><span>Browser-Sandbox · Dateisystem lokal im Gerät gespeichert</span><span>Keine echten Systembefehle · keine echte Portfreigabe</span></footer>
   </div>
-  <div id="os-picker" class="picker-backdrop" role="dialog" aria-modal="true" aria-labelledby="picker-title">
-    <section class="picker-panel">
-      <div class="picker-head"><div><div class="eyebrow">DESKTOPSIM / SYSTEMAUSWAHL</div><h1 id="picker-title">Wähle deinen Desktop.</h1><p>Oberfläche, Terminalsyntax und Dateipfade ändern sich passend zum Betriebssystem.</p></div><button type="button" id="close-picker" class="circle-button" aria-label="Auswahl schließen">×</button></div>
-      <div id="os-grid" class="os-grid"></div>
-      <div class="picker-footer"><span>9 Oberflächen · virtuelle Befehle · lokale Speicherung</span><span>Windows · Linux · macOS · Unix</span></div>
-    </section>
-  </div>
+
+  <section id="landing" class="landing" aria-labelledby="landing-title">
+    <div class="lp-inner">
+      <header class="lp-hero">
+        <div class="lp-brand"><span class="identity-mark" aria-hidden="true">D<span>_</span></span><span>DesktopSim</span>
+          <button type="button" id="landing-close" class="lp-close" aria-label="Zurück zum Desktop">×</button></div>
+        <h1 id="landing-title">Neun Betriebssysteme.<br><em>Echter Code.</em> Im Browser.</h1>
+        <p>Erlebe Windows XP bis 11, Debian, Arch Linux, macOS und Unix mit originalgetreuer Bedienung, einer echten Shell (Pipes, Skripte, <code>sudo</code>) und Programmiersprachen, die wirklich laufen – ohne Installation, ohne Server.</p>
+        <div class="lp-actions"><button type="button" id="landing-continue" class="lp-primary" hidden><span>Weiter</span> →</button><a class="lp-secondary" href="#systeme">System auswählen ↓</a></div>
+        <ul class="lp-langs" aria-label="Echte Laufzeiten">
+          <li><b>Python 3.14</b><small>Pyodide</small></li><li><b>C / C++</b><small>Clang 22</small></li><li><b>Java</b><small>javac + JVM</small></li><li><b>JavaScript</b><small>Node-API</small></li><li><b>PHP 8.4</b><small>php-wasm</small></li><li><b>SQLite 3</b><small>sql.js</small></li>
+        </ul>
+      </header>
+      <div id="systeme" class="lp-os-wrap"><div class="lp-os-head"><h2>Wähle deinen Desktop</h2><label class="lp-quick"><input type="checkbox" id="landing-quickboot"> Schnellstart (ohne Boot-Animation)</label></div><div id="landing-os" class="lp-os"></div></div>
+      <div class="lp-features">
+        <article><h3>Wie das Original</h3><p>Startmenüs, Taskleisten, Dock, GNOME-Aktivitäten, KDE-Panel, CDE-Frontpanel, Boot- und Anmeldebildschirme, Fenster andocken, Kontextmenüs.</p></article>
+        <article><h3>Echte Shell</h3><p>Bash, Zsh, CMD und PowerShell mit Pipes, Umleitungen, Variablen, Skripten, Exitcodes, Paketmanagern und realistischen Fehlermeldungen.</p></article>
+        <article><h3>Interaktive Programme</h3><p><code>input()</code>, <code>cin</code>, <code>Scanner</code> und <code>prompt()</code> fragen direkt im Terminal. Dateien landen im virtuellen Dateisystem.</p></article>
+        <article><h3>Privat & offline-fähig</h3><p>Alles bleibt im Browser. Laufzeiten werden einmalig geladen und zwischengespeichert. Keine Anmeldung, kein Tracking.</p></article>
+      </div>
+      <footer class="lp-foot">Lern-Nachbildungen – keine originalen Betriebssystem-Dateien oder Logos. Java: Built with CheerpJ. · <a href="../">Zur Hauptseite</a></footer>
+    </div>
+  </section>
   <input id="import-input" type="file" accept=".json,application/json" hidden>
-  <noscript>DesktopSim benötigt JavaScript. Bitte aktiviere JavaScript im Browser.</noscript>
+  <noscript>DesktopSim benötigt JavaScript.</noscript>
 </body>
 </html>

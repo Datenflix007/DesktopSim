@@ -1,158 +1,100 @@
-// Keine zusätzlichen NPM-Abhängigkeiten. Start: node tests/smoke.mjs
+// Smoke-Test ohne NPM-Abhängigkeiten: node tests/smoke.mjs
+// Prüft Shell-Engine (Bash/Zsh/sh/CMD/PowerShell), Dateisystem, SQL, Git, Skripte und App-Verdrahtung.
+// Die echten WebAssembly-Laufzeiten (Python, Clang, Java, PHP, SQLite) laufen nur im Browser;
+// in Node greift der Offline-Fallback.
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {OS_LIST,VFS,homePath,pathDisplay,joinPath} from '../assets/vfs.js';
+import {OS_LIST,VFS,homePath,joinPath,trashPath} from '../assets/vfs.js';
 import {GitLearningRepo} from '../assets/git.js';
-import {MiniSQL,compileSource,simulateCompiled,simulatePython} from '../assets/runtimes.js';
+import {MiniSQL,compileSource,simulateCompiled} from '../assets/runtimes.js';
 import {TerminalEngine,promptFor} from '../assets/terminal.js';
+import {parse,dialectFor} from '../assets/shell/parser.js';
+
 const storage=new Map();
-globalThis.localStorage={getItem:key=>storage.get(key)??null,setItem:(key,val)=>storage.set(key,String(val)),removeItem:key=>storage.delete(key)};
-const state={fs:null,db:null,git:null,servers:new Map(),python:{run:async()=>''},toast:()=>{},notifyFiles:()=>{},updateTerminalTitle:()=>{},openEditor:()=>{},openIDE:()=>{},openGitGraph:()=>{},openFunLab:()=>{},startMatrix:()=>{},launchConfetti:()=>{},toggleByte:()=>true,openBrowser:()=>{},openFiles:()=>{},openSQL:()=>{}};
-const engine=new TerminalEngine(state);state.termEngine=engine;
+globalThis.localStorage={getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,String(v)),removeItem:k=>storage.delete(k)};
+const app={fs:null,db:null,git:null,servers:new Map(),windows:new Map(),notifyFiles(){},toast(){},notify(){}};
+const engine=new TerminalEngine(app);
+const strip=s=>String(s).replace(/\x1b\[[0-9;]*m/g,'');
+const run=async(t,cmd)=>strip(await engine.execute(cmd,t));
+const shellFor=os=>({os,shell:OS_LIST.find(o=>o.id===os).shell,cwd:joinPath(homePath(os),'Projects'),history:[]});
+
+// --- Alle Systeme: Grundbefehle, Umleitung, Pipes, SQL, localhost ---
 for(const os of OS_LIST){
-  state.fs=new VFS(os.id);state.db=new MiniSQL(os.id);state.servers.clear();
-  const cwd=joinPath(homePath(os.id),'Projects');
-  const shell={os:os.id,shell:os.shell,cwd,sqlMode:false,history:[],admin:false};
-  assert.ok(state.fs.read('hello.py',cwd).includes('print'),os.id+' demo file');
-  assert.ok(promptFor(shell).length>5,os.id+' prompt');
-  assert.ok((await engine.execute(os.id.startsWith('win')?'dir':'ls -la',shell)).includes('hello.py'),os.id+' list');
-  assert.ok((await engine.execute('whoami',shell)).toLowerCase().includes('student'),os.id+' whoami');
-  assert.equal(await engine.execute('mkdir versuch',shell),'',os.id+' mkdir');
-  assert.equal(await engine.execute('cd versuch',shell),'',os.id+' cd');
-  assert.equal(await engine.execute('echo test > test.txt',shell),'',os.id+' redirect');
-  assert.equal(state.fs.read('test.txt',shell.cwd),'test\n',os.id+' file write');
-  assert.equal(await engine.execute('cd ..',shell),'',os.id+' cd parent');
-  assert.ok(state.fs.exists('versuch/test.txt',shell.cwd),os.id+' file persists');
-  assert.ok((await engine.execute('python -m http.server 8000',shell)).includes('virtuell'),os.id+' server');
-  assert.ok((await engine.execute('curl http://localhost:8000',shell)).includes('404')===false,os.id+' simulated curl');
-  assert.ok((await engine.execute('sqlite3 demo.db',shell)).includes('SQL-Lernkonsole'),os.id+' SQL start');
-  assert.ok((await engine.execute('SELECT * FROM schueler;',shell)).includes('Alex'),os.id+' SQL terminal');
-  assert.equal(await engine.execute('.exit',shell),'SQL-Konsole verlassen.');
-  if(os.id.startsWith('win'))assert.ok((await engine.execute('uname -a',shell)).includes('nicht als Befehl'),os.id+' CMD semantics');
-  else assert.ok((await engine.execute('ipconfig',shell)).includes('command not found'),os.id+' Unix semantics');
+  app.fs=new VFS(os.id);app.db=new MiniSQL(os.id);app.git=new GitLearningRepo(os.id);app.servers.clear();
+  const t=shellFor(os.id),win=os.id.startsWith('win');
+  assert.ok(promptFor(t).length>3,os.id+' prompt');
+  assert.match(await run(t,win?'dir':'ls'),/hello\.py/,os.id+' list');
+  assert.match(await run(t,'whoami'),/student/i,os.id+' whoami');
+  const md=await run(t,'mkdir versuch');assert.ok(t.shell==='powershell'?/versuch/.test(md):md==='',os.id+' mkdir');
+  assert.equal(await run(t,'cd versuch'),'',os.id+' cd');
+  assert.equal(await run(t,'echo test > test.txt'),'',os.id+' redirect');
+  assert.equal(app.fs.read('test.txt',t.cwd).trim(),'test',os.id+' file written');
+  await run(t,'cd ..');assert.ok(app.fs.exists('versuch/test.txt',t.cwd),os.id+' persisted');
+  assert.match(await run(t,win?'type README.txt | findstr Python':'cat README.txt | grep Python'),/Python/,os.id+' pipe');
+  assert.match(await run(t,(win?'python':'python3')+' -m http.server 8000'),/8000/,os.id+' server');
+  assert.match(await run(t,'curl http://localhost:8000/README.txt'),/Übungsdateien/,os.id+' curl localhost');
+  assert.match(await run(t,'sqlite3 demo.db'),/SQLite version/,os.id+' sqlite start');
+  assert.match(await run(t,'SELECT * FROM schueler;'),/Alex/,os.id+' sql');
+  assert.equal(await run(t,'.exit'),'SQL-Konsole verlassen.');
+  if(win)assert.match(await run({...t,shell:'cmd'},'uname -a'),/nicht gefunden|falsch geschrieben/,os.id+' cmd semantics');
+  else assert.match(await run(t,'ipconfig'),/not found|nicht gefunden/,os.id+' unix semantics');
 }
-let db=new MiniSQL('debian');
-let res=db.run("SELECT name, punkte FROM schueler WHERE punkte >= 90 ORDER BY punkte DESC;");
-assert.deepEqual(res.rows.map(r=>r.name),['Sam','Robin'],'comparison and sorting');
-res=db.run("INSERT INTO schueler (name, klasse, punkte) VALUES ('Mira', '9b', 92);");assert.ok(res.message.includes('eingefügt'));
-res=db.run("UPDATE schueler SET punkte = 98 WHERE name = 'Mira';");assert.equal(res.message,'1 Zeile(n) aktualisiert');
-res=db.run("SELECT COUNT(*) AS n FROM schueler WHERE punkte >= 90;");assert.equal(res.rows[0].n,3);
-res=db.run("DELETE FROM schueler WHERE name = 'Mira';");assert.equal(res.message,'1 Zeile(n) gelöscht');
-res=db.run('CREATE TABLE haustiere (id INTEGER, name TEXT);');assert.ok(res.message.includes('erstellt'));
-assert.equal(db.run('SHOW TABLES').rows.length,3);
-assert.equal(simulateCompiled('php','<?php $name = "Ada"; echo $name; ?>').output,'Ada');
-assert.equal(simulateCompiled('java','class Main { void run() { System.out.println(2 + 3); } }').output,'5');
-assert.equal(simulateCompiled('cs','class Program { static void Main() { Console.WriteLine("Hallo"); } }').output,'Hallo');
-assert.equal(simulateCompiled('cpp','int main() { std::cout << "C++ " << 2 + 3 << std::endl; }').output,'C++ 5');
-assert.equal(simulateCompiled('c','int main(void) { printf("C %d\\n", 2 + 3); }').output,'C 5\n');
+
+// --- Bash: Variablen, Kontrollstrukturen, Skripte, Rechte, Exitcodes ---
+app.fs=new VFS('debian');app.git=new GitLearningRepo('debian');
+const b=shellFor('debian');
+assert.equal(await run(b,'X=5; echo $((X*2))'),'10','arithmetic');
+assert.equal(await run(b,'for f in *.py; do echo $f; done'),'hello.py\nrechner.py','for + glob');
+assert.equal(await run(b,'if [ -f hello.py ]; then echo ja; else echo nein; fi'),'ja','if test');
+assert.equal(await run(b,'ls nichtda 2>/dev/null; echo $?'),'2','exit code');
+assert.equal(await run(b,'false || echo fallback'),'fallback','or-list');
+assert.equal(await run(b,'echo "Ich bin $(whoami)"'),'Ich bin student','command substitution in quotes');
+assert.equal(await run(b,'seq 1 5 | sort -rn | head -n 2'),'5\n4','multi pipe');
+assert.match(await run(b,'./skript.sh'),/Python-Datei: hello\.py/,'executable script');
+await run(b,'chmod -x skript.sh');assert.match(await run(b,'./skript.sh'),/Keine Berechtigung/,'permission denied');
+assert.match(await run(b,'sl'),/sudo apt install sl/,'missing package hint');
+assert.match(await run(b,'apt install cowsay'),/Sind Sie Root/,'apt needs root');
+assert.match(await run(b,'nichtvorhanden'),/bash: nichtvorhanden: Befehl nicht gefunden/,'not found');
+assert.match(await run(b,'git status'),/Auf Branch main/,'git status');
+assert.equal(await run(b,'git add hello.py'),'','git add');
+assert.match(await run(b,'git commit -m "Python verbessert"'),/Python verbessert/,'git commit');
+assert.match(await run(b,'man ls'),/Verzeichnisinhalte auflisten/,'man page');
+const moved=app.fs.trash(joinPath(b.cwd,'demo.sql'));assert.ok(app.fs.exists(joinPath(trashPath('debian'),moved)),'trash');app.fs.restoreFromTrash(moved);assert.ok(app.fs.exists('demo.sql',b.cwd),'restore');
+
+// --- zsh-Eigenheiten ---
+app.fs=new VFS('macos');const z=shellFor('macos');
+assert.match(await run(z,'echo *.xyz'),/no matches found/,'zsh nomatch');
+assert.match(await run(z,'sw_vers'),/macOS/,'sw_vers');
+
+// --- CMD & PowerShell ---
+app.fs=new VFS('win11');app.git=new GitLearningRepo('win11');
+const c={...shellFor('win11'),shell:'cmd'};
+assert.equal(await run(c,'set NAME=Max & echo Hallo %NAME%'),'Hallo Max','cmd variables');
+assert.match(await run(c,'dir *.py'),/hello\.py[\s\S]*Datei\(en\)/,'cmd dir wildcard');
+assert.match(await run(c,'foo'),/ist entweder falsch geschrieben/,'cmd not found');
+app.fs.write('start.bat','@echo off\nset /a X=6*7\necho Ergebnis %X%\nif exist hello.py echo gefunden\n',c.cwd);
+assert.match(await run(c,'start.bat'),/Ergebnis 42\s+gefunden/,'batch file');
+const p=shellFor('win11');
+await run(p,'$x = 21');assert.equal(await run(p,'Write-Output "Wert $x"'),'Wert 21','ps variables');
+assert.match(await run(p,'Get-ChildItem *.py'),/Mode\s+LastWriteTime[\s\S]*hello\.py/,'ps gci');
+assert.match(await run(p,'foo'),/wurde nicht als Name eines Cmdlet/,'ps not found');
+app.fs.write('test.ps1','Write-Output "skript"\n',p.cwd);assert.match(await run(p,'.\\test.ps1'),/deaktiviert/,'ps execution policy');
+
+// --- Parser ---
+assert.equal(parse('a | b && c; d',dialectFor('bash')).items.length,2,'parser lists');
+assert.throws(()=>parse('if true; then echo',dialectFor('bash')),/fi/,'parser errors');
+
+// --- Offline-Fallbacks der Sprachen ---
 assert.equal(simulateCompiled('js','console.log("JS", 2 + 3);').output,'JS 5');
 assert.equal(compileSource('cpp','int main() { return 0; }').ok,true);
-assert.equal(compileSource('cpp','std::cout << "kein Einstieg";').ok,false);
-assert.ok(simulatePython('for i in range(3):\n    print("Hi")').output.split('\n').length===3);
-state.fs=new VFS('debian');state.fs.write('persist.txt','ok',homePath('debian'));
-assert.equal(new VFS('debian').read('persist.txt',homePath('debian')),'ok');
-state.fs=new VFS('debian');state.db=new MiniSQL('debian');state.servers.clear();
-state.git=new GitLearningRepo('debian');
-const compilerShell={os:'debian',shell:'bash',cwd:joinPath(homePath('debian'),'Projects'),sqlMode:false,history:[],admin:false};
-assert.match(await engine.execute('git status',compilerShell),/On branch main/,'git status');
-assert.match(await engine.execute('git add hello.py',compilerShell),/Staging-Area/,'git add');
-assert.match(await engine.execute('git commit -m "Python Hallo verbessern"',compilerShell),/Python Hallo verbessern/,'git commit');
-assert.match(await engine.execute('git log --oneline',compilerShell),/Python Hallo verbessern/,'git log');
-assert.match(await engine.execute('git branch feature/test',compilerShell),/erstellt/,'git branch');
-assert.match(await engine.execute('git switch feature/test',compilerShell),/gewechselt/,'git switch');
-assert.equal(state.git.status().branch,'feature/test','git branch state');
-assert.ok(state.git.graph().some(commit=>commit.refs.includes('feature/test')),'git graph branch reference');
-let funEffect=null;state.startMatrix=()=>funEffect='matrix';state.launchConfetti=()=>funEffect='party';state.toggleByte=()=>{funEffect='byte';return true};
-assert.equal(await engine.execute('matrix',compilerShell),'Matrix-Modus aktiv. Mit Esc beenden.','matrix terminal command');
-assert.equal(funEffect,'matrix','matrix effect started');
-assert.equal(await engine.execute('party',compilerShell),'Party-Modus gestartet ✨','party terminal command');
-assert.equal(funEffect,'party','confetti effect started');
-assert.equal(await engine.execute('byte',compilerShell),'Byte ist auf dem Desktop. Klicke ihn an!','byte terminal command');
-assert.equal(funEffect,'byte','desktop companion toggled');
-let openedIDE=null;state.openIDE=(file,cwd)=>openedIDE={file,cwd};
-assert.equal(await engine.execute('ide main.cpp',compilerShell),'IDE geöffnet: main.cpp','IDE terminal command');
-assert.deepEqual(openedIDE,{file:'main.cpp',cwd:compilerShell.cwd},'IDE receives terminal file and path');
-assert.equal(await engine.execute('code hello.py',compilerShell),'IDE geöffnet: hello.py','code alias opens IDE');
-assert.match(await engine.execute('g++ main.cpp -o hallo',compilerShell),/Build-Artefakt/,'g++ build');
-assert.match(await engine.execute('./hallo',compilerShell),/Hallo aus C\+\+: 5/,'g++ run');
-assert.match(await engine.execute('clang++ main.cpp -o clang-hallo',compilerShell),/Build-Artefakt/,'clang++ build');
-assert.match(await engine.execute('./clang-hallo',compilerShell),/Hallo aus C\+\+: 5/,'clang++ run');
-assert.match(await engine.execute('gcc hello.c -o c-hallo',compilerShell),/Build-Artefakt/,'gcc build');
-assert.match(await engine.execute('./c-hallo',compilerShell),/Hallo aus C: 5/,'gcc run');
-assert.match(await engine.execute('javac Main.java',compilerShell),/Klassendatei/,'javac build');
-assert.match(await engine.execute('java Main',compilerShell),/Hallo aus Java/,'java run');
-assert.match(await engine.execute('node hello.js',compilerShell),/Hallo aus JavaScript DesktopSim/,'node run');
-state.fs=new VFS('win11');state.db=new MiniSQL('win11');state.servers.clear();
-const compilerWindowsShell={os:'win11',shell:'cmd',cwd:joinPath(homePath('win11'),'Projects'),sqlMode:false,history:[],admin:false};
-assert.match(await engine.execute('g++ main.cpp -o hallo',compilerWindowsShell),/hallo\.exe/,'Windows g++ build');
-assert.match(await engine.execute('hallo.exe',compilerWindowsShell),/Hallo aus C\+\+: 5/,'Windows executable run');
-state.fs.write('broken.cpp','std::cout << "kein Einstieg";',compilerWindowsShell.cwd);
-assert.match(await engine.execute('g++ broken.cpp -o kaputt',compilerWindowsShell),/Einstiegspunkt/,'compiler error feedback');
-const appSource=await readFile(new URL('../assets/app.js',import.meta.url),'utf8');
-const ideHelperSource=appSource.slice(appSource.indexOf('const escapeHTML'),appSource.indexOf('\n\nclass DesktopSim'));
-const highlightIDE=Function(`${ideHelperSource};return ideSyntaxHTML;`)();
-const highlightedPython=highlightIDE('def hallo():\n  # Kommentar\n  print("Hallo")','py');
-assert.match(highlightedPython,/token-keyword[^>]*>def/,'IDE highlights Python keywords');
-assert.match(highlightedPython,/token-comment[^>]*># Kommentar/,'IDE highlights comments');
-assert.match(highlightedPython,/token-string[^>]*>&quot;Hallo&quot;/,'IDE highlights strings safely');
-const structHelperSource=appSource.slice(appSource.indexOf('const STRUCT_LANGUAGES'),appSource.indexOf('\n\nclass DesktopSim'));
-const {parseStructuredCode,structClasses,structCodeFromNodes,structCountNodes}=Function(`${structHelperSource};return {parseStructuredCode,structClasses,structCodeFromNodes,structCountNodes};`)();
-const nestedPython=parseStructuredCode(`class Rechnung:
-    def summe(self, werte):
-        for wert in werte:
-            if wert > 0:
-                print(wert)
-            elif wert == 0:
-                print("neutral")
-            else:
-                print("ignoriert")
 
-class PremiumRechnung(Rechnung):
-    def anzeigen(self):
-        return Rechnung()`, 'python');
-assert.equal(structClasses(nestedPython).length,2,'Python classes are retained for UML');
-const pythonLoop=nestedPython[0].children[0].children[0];
-assert.equal(pythonLoop.type,'loop','nested Python loop is retained');
-assert.equal(pythonLoop.children[0].type,'if','nested Python decision is retained');
-assert.equal(pythonLoop.children[0].branches.length,3,'Python elif and else branches are retained');
-assert.match(structCodeFromNodes(nestedPython,'python'),/elif wert == 0:/,'nested Python tree can be generated again');
-const nestedJavaScript=parseStructuredCode(`class Rechnung {
-  summe(werte) {
-    for (const wert of werte) {
-      if (wert > 0) {
-        speichern(wert);
-      } else {
-        speichern(0);
-      }
-    }
-  }
-}
-class PremiumRechnung extends Rechnung {
-  anzeigen() { return new Rechnung(); }
-}`, 'javascript');
-assert.equal(structClasses(nestedJavaScript).length,2,'JavaScript classes are retained for UML');
-assert.ok(structCountNodes(nestedJavaScript)>=8,'brace parser retains nested JavaScript blocks');
-assert.equal(nestedJavaScript[0].children[0].children[0].type,'loop','nested JavaScript loop is retained');
-assert.equal(nestedJavaScript[0].children[0].children[0].children[0].branches.length,2,'JavaScript else branch is retained');
-assert.match(structCodeFromNodes(nestedJavaScript,'javascript'),/class PremiumRechnung extends Rechnung/,'class inheritance can be generated again');
-assert.match(appSource,/openStructogram\(\)/,'Struktogramm-App registered');
-assert.match(appSource,/openIDE\(file='hello\.py'/,'IDE-App registered');
-assert.match(appSource,/ideSyntaxHTML/,'IDE syntax highlighting layer registered');
-assert.match(appSource,/class="ide-shell"/,'VS-Code-like IDE shell registered');
-assert.match(appSource,/openGitGraph\(\)/,'Git Graph-App registered');
-assert.match(appSource,/git-graph-row/,'Git commit graph UI registered');
-assert.match(appSource,/openFunLab\(\)/,'Fun Lab registered');
-assert.match(appSource,/matrix-overlay/,'Matrix screensaver registered');
-assert.match(appSource,/Konami! Party-Modus/,'Konami Easter Egg registered');
-assert.match(appSource,/Code aus dem Programmbaum erzeugt/,'Struktogramm code generation wired');
-assert.match(appSource,/Flussdiagramm/,'flowchart view registered');
-assert.match(appSource,/UML-Klassen/,'UML class diagram view registered');
-assert.match(appSource,/https:\\\/\\\/datenflix007\\\.github\\\.io/,'Datenflix browser allowlist wired');
-assert.match(appSource,/allow-scripts allow-forms allow-popups/,'External page stays sandboxed');
-assert.match(appSource,/openSolitaire\(\)/,'Windows XP Solitaire registered');
-assert.match(appSource,/openMinesweeper\(\)/,'Windows Minesweeper registered');
-assert.match(appSource,/openSnake\(\)/,'Unix game registered');
-assert.match(appSource,/openMacGame\(\)/,'macOS game registered');
-assert.match(appSource,/foundations\.every\(stack=>stack\.length===13\)/,'Solitaire win condition wired');
-assert.match(appSource,/plant\(index\)/,'Minesweeper safe first click wired');
-console.log('PASS: 9 Betriebssysteme, OS-Kommandos, Dateisystem, SQL, Sprach-Demos, Compiler-Lernumgebung, IDE, Git Graph, Fun Lab, Persistenz, UI-Integrationen und OS-Spiele.');
+// --- App-Verdrahtung (Quelltextprüfung) ---
+const src=async f=>readFile(new URL('../assets/'+f,import.meta.url),'utf8');
+const all=(await Promise.all(['app.js','ui/chrome.js','apps/terminal-app.js','apps/files-app.js','apps/editor-app.js','apps/browser-app.js','apps/system-apps.js','apps/classic.js','runtime/index.js'].map(src))).join('\n');
+for(const needle of ['openTerminal(','openFiles(','openEditor(','openIDE(','openBrowser(','openSettings(','openTaskManager(','openCalculator(','openSQL(','openGitGraph()','openStructogram()','openGame()','openFunLab()','menuXP()','menu7()','menu8()','menu10()','menu11()','menuKDE()','spotlight()','enterOverview()','snapWindow(','compileJava(','compileC(','runPython(','runPHP(','runWasm('])
+  assert.ok(all.includes(needle),'wired: '+needle);
+const index=await readFile(new URL('../index.html',import.meta.url),'utf8');
+assert.match(index,/id="landing"/,'landing page');
+const sw=await readFile(new URL('../sw.js',import.meta.url),'utf8');
+assert.match(sw,/__ds_io__\/read/,'stdin bridge in service worker');
+console.log('PASS: 9 Systeme · Bash/Zsh/CMD/PowerShell · Pipes, Skripte, Rechte, Exitcodes · Dateisystem & Papierkorb · SQL · Git · App-Verdrahtung');

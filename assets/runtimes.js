@@ -96,13 +96,4 @@ export function simulatePython(source){
   }
   return{simulation:true,output:lines.length?lines.join('\n'):'[Demo] Bitte Pyodide laden, um vollständiges Python auszuführen.',detail:'Offline-Demomodus (einfache Zuweisungen, for-range und print).'};
 }
-export class PythonRuntime{
-  constructor(){this.worker=null;this.pending=new Map();this.nextId=1;this.loaded=false;this.loading=false}
-  ensure(){if(this.worker)return;this.loading=true;this.worker=new Worker(new URL('./python-worker.js',import.meta.url),{type:'module'});this.worker.onmessage=e=>{
-    if(e.data?.ready){this.loaded=true;this.loading=false;return}
-    if(e.data?.initError){this.loading=false;for(const p of this.pending.values())p.reject(Error(e.data.initError));this.pending.clear();this.terminate();return}
-    const p=this.pending.get(e.data?.id);if(p){this.pending.delete(e.data.id);e.data.error?p.reject(Error(e.data.error)):p.resolve(e.data.output||'');}
-  };this.worker.onerror=e=>{for(const p of this.pending.values())p.reject(Error('Python kann nicht geladen werden (Netzwerk/CDN).'));this.pending.clear();this.terminate()}}
-  run(source){this.ensure();return new Promise((resolve,reject)=>{const id=this.nextId++;this.pending.set(id,{resolve,reject});this.worker.postMessage({id,source})})}
-  terminate(){this.worker?.terminate();this.worker=null;this.loaded=false;this.loading=false;for(const p of this.pending.values())p.reject(Error('Python-Ausführung gestoppt'));this.pending.clear()}
-}
+// Die echten Laufzeiten liegen in assets/runtime/ (Pyodide, Clang, CheerpJ, php-wasm, sql.js). Diese Datei enthält die Offline-Fallbacks.

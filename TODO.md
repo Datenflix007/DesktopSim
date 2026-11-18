@@ -61,3 +61,14 @@
 - [x] Einen beendbaren Matrix-Bildschirmschoner und einen Konfetti-Modus umsetzen.
 - [x] Einen interaktiven Desktop-Begleiter sowie ein Konami-Easter-Egg ergänzen.
 - [x] Terminal-Kurzbefehle, Dokumentation und automatisierte Prüfungen ergänzen.
+
+## Realistische OS-Simulation & echte Laufzeiten
+- [x] Echte Laufzeiten: Python (Pyodide), JavaScript, C/C++ (Clang 22 → WASI), Java (javac + CheerpJ), PHP 8.4, SQLite.
+- [x] Interaktive Eingabe über Service-Worker-Brücke (input/cin/Scanner/readline), Strg+C/Strg+D.
+- [x] Neue Shell-Engine mit Parser (Pipes, Umleitungen, Variablen, Skripte, Exitcodes) für Bash/Zsh/sh/CMD/PowerShell.
+- [x] Startseite, Boot-/Login-/Sperr-/Herunterfahren-Bildschirme je System.
+- [x] Fenstermanager: Größe ändern, Andocken, Snap-Layouts, Übersicht, Arbeitsbereiche (CDE).
+- [x] OS-spezifische Taskleisten, Startmenüs, Dock, Panels, Kontextmenüs, Benachrichtigungen.
+- [x] Neue Apps: Einstellungen, Task-Manager, Rechner, Info, Ausführen; Dateimanager, Editor, IDE, Browser, SQL Studio überarbeitet.
+- [x] Browser-Tests aller 9 Systeme × 20 Apps ohne Ausnahmen; Smoke-Test aktualisiert.
+- [ ] C++-Exceptions (benötigt Sysroot mit libunwind/EH) und C#-Laufzeit.

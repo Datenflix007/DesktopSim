@@ -1,671 +1,353 @@
-import {OS_LIST,getOS,isWindows,VFS,homePath,pathDisplay,joinPath,extName} from './vfs.js';
-import {MiniSQL,PythonRuntime,simulateCompiled} from './runtimes.js';
+// DesktopSim – Kern: Startseite, Bootvorgang, Fenstermanager, Desktop und App-Verwaltung.
+import {OS_LIST,getOS,isWindows,VFS,homePath,pathDisplay,joinPath,extName,trashPath} from './vfs.js';
+import {MiniSQL} from './runtimes.js';
 import {GitLearningRepo} from './git.js';
-import {TerminalEngine,promptFor,shellHelp} from './terminal.js';
+import {TerminalEngine} from './terminal.js';
+import {gitCommand} from './shell/programs.js';
+import {Runtimes} from './runtime/index.js';
+import {profileFor} from './ui/profiles.js';
+import {appIcon,fileIcon,folderIcon,lineIcon,osMark} from './ui/icons.js';
+import {Chrome} from './ui/chrome.js';
+import {ClassicApps,escapeHTML} from './apps/classic.js';
+import {TerminalApp} from './apps/terminal-app.js';
+import {FilesApp} from './apps/files-app.js';
+import {EditorApps} from './apps/editor-app.js';
+import {BrowserApp} from './apps/browser-app.js';
+import {SystemApps} from './apps/system-apps.js';
 
-const $ = (s,root=document)=>root.querySelector(s);
-const escapeHTML = s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const svg=(name,size=22)=>{
-  const paths={
-    terminal:'<rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="m6 9 4 3-4 3m7 0h5"/>',
-    folder:'<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
-    file:'<path d="M6 2h8l5 5v14a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"/><path d="M14 2v6h5M8 12h8M8 16h8"/>',
-    code:'<rect x="2.5" y="3" width="19" height="18" rx="3"/><path d="m9 9-3 3 3 3m6-6 3 3-3 3m-2-7-2 8"/>',
-    browser:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 0 0 18M12 3a15 15 0 0 1 0 18"/>',
-    database:'<ellipse cx="12" cy="5.5" rx="9" ry="3.5"/><path d="M3 5.5v13c0 2 4 3.5 9 3.5s9-1.5 9-3.5v-13M3 12c0 2 4 3.5 9 3.5s9-1.5 9-3.5"/>',
-    info:'<circle cx="12" cy="12" r="9"/><path d="M12 16v-4m0-4h.01"/>',
-    settings:'<circle cx="12" cy="12" r="3"/><path d="M4 12a8 8 0 0 1 16 0 8 8 0 0 1-16 0Z"/>',
-    plus:'<path d="M12 4v16M4 12h16"/>',
-    windows:'<path d="M3 5 11 4v8H3zm10-1 8-1v9h-8zM3 14h8v7l-8-1zm10 0h8v8l-8-1z"/>',
-    download:'<path d="M12 3v13m-5-5 5 5 5-5M4 19h16"/>',
-    search:'<circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/>',
-    home:'<path d="m3 11 9-8 9 8v9H3v-9Zm6 9v-7h6v7"/>',
-    play:'<path d="m8 5 12 7-12 7Z"/>',
-    save:'<path d="M4 3h14l3 3v15H3V3Zm3 0v7h10V3M7 21v-8h10v8"/>',
-    trash:'<path d="M3 6h18M8 6V4h8v2m3 0-1 15H6L5 6m5 4v7m4-7v7"/>',
-    arrow:'<path d="m15 18-6-6 6-6"/>',
-    server:'<rect x="3" y="3" width="18" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h7M11 17h7"/>'
-    ,structure:'<path d="M4 3h16v18H4zM4 9h16M4 15h16M12 9v6"/><path d="m7 12 2 1.5L7 15m10-3-2 1.5 2 1.5"/>'
-    ,game:'<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M8 12h4m-2-2v4m6-1h.01m2-2h.01M9 3v3m6-3v3"/>'
-    ,branch:'<circle cx="6" cy="5" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="6" cy="19" r="2.5"/><path d="M6 7.5v9m2.5-10C10 8 12 8 15.5 8M8.5 18.5c4 0 7.5-1 7.5-7.5"/>'
-    ,sparkle:'<path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3Zm7 12 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15ZM5 16l.6 1.7L7.3 18l-1.7.6L5 20.3l-.6-1.7L2.7 18l1.7-.3L5 16Z"/>'
-  };
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.file}</svg>`;
-};
-const ACTIONS=[{id:'terminal',label:'Terminal',detail:'Neue Konsole'},{id:'files',label:'Dateimanager',detail:'Virtuelle Ordner'},{id:'editor',label:'Code-Editor',detail:'Dateien bearbeiten'},{id:'ide',label:'IDE',detail:'VS-Code-Arbeitsplatz'},{id:'git',label:'Git Graph',detail:'Commits & Branches'},{id:'structogram',label:'Struktogramm',detail:'Code ↔ Ablauf'},{id:'game',label:'OS-Spiel',detail:'Spiel passend zum System'},{id:'fun',label:'Fun Lab',detail:'Matrix, Party & Byte'},{id:'browser',label:'Webbrowser',detail:'localhost / Website'},{id:'sql',label:'SQL Studio',detail:'SQL-Abfragen'},{id:'guide',label:'Anleitung',detail:'Befehle & Übungen'}];
-const iconForAction=id=>id==='files'?'folder':id==='editor'||id==='ide'?'code':id==='git'?'branch':id==='fun'?'sparkle':id==='structogram'?'structure':id==='game'?'game':id==='guide'?'info':id==='sql'?'database':id==='browser'?'browser':'terminal';
-const IDE_LANGUAGES={py:'Python',js:'JavaScript',mjs:'JavaScript',html:'HTML',htm:'HTML',css:'CSS',java:'Java',cpp:'C++',c:'C',cs:'C#',php:'PHP',sql:'SQL',json:'JSON',md:'Markdown',txt:'Plain Text'};
-const IDE_KEYWORDS={
-  py:['and','as','break','class','def','elif','else','False','for','from','if','import','in','None','not','or','print','range','return','True','while'],
-  js:['async','await','break','class','const','else','export','false','for','from','function','if','import','let','new','null','return','true','while','console'],
-  mjs:['async','await','break','class','const','else','export','false','for','from','function','if','import','let','new','null','return','true','while','console'],
-  java:['class','else','false','for','if','import','int','new','null','package','private','public','return','static','String','System','true','void','while'],
-  cpp:['auto','bool','char','class','const','double','else','false','float','for','if','include','int','namespace','public','return','std','string','true','using','void','while'],
-  c:['char','const','double','else','float','for','if','include','int','long','return','short','sizeof','struct','void','while'],
-  cs:['bool','class','Console','else','false','for','if','int','namespace','new','null','public','return','static','string','true','using','void','while'],
-  php:['class','echo','else','false','for','function','if','new','null','public','return','true','while'],
-  sql:['AS','BY','CREATE','DELETE','DESC','DROP','FROM','GROUP','INSERT','INTO','JOIN','LIMIT','ORDER','SELECT','SET','TABLE','UPDATE','VALUES','WHERE']
-};
-const ideSyntaxHTML=(source,extension)=>{
-  const text=String(source??''),words=IDE_KEYWORDS[extension]||[];
-  if(!words.length)return escapeHTML(text);
-  const pattern=new RegExp(`("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')|(//[^\\n]*|#[^\\n]*)|(\\b(?:${words.join('|')})\\b)|(\\b\\d+(?:\\.\\d+)?\\b)`,'g');
-  let result='',offset=0,match;
-  while((match=pattern.exec(text))){result+=escapeHTML(text.slice(offset,match.index));const cls=match[1]?'token-string':match[2]?'token-comment':match[3]?'token-keyword':'token-number';result+=`<span class="${cls}">${escapeHTML(match[0])}</span>`;offset=pattern.lastIndex}
-  return result+escapeHTML(text.slice(offset));
-};
-
-const STRUCT_LANGUAGES={python:{label:'Python',extension:'py',brace:false},javascript:{label:'JavaScript',extension:'js',brace:true},java:{label:'Java',extension:'java',brace:true},cs:{label:'C#',extension:'cs',brace:true},cpp:{label:'C++',extension:'cpp',brace:true}};
-let structNodeSerial=0;
-const structNode=(type,props={})=>({id:`struct-${++structNodeSerial}`,type,children:[],...props});
-const structBranch=(label,condition='')=>({label,condition,children:[]});
-const structIndent=line=>{const match=String(line).match(/^[\t ]*/)?.[0]||'';return [...match].reduce((sum,char)=>sum+(char==='\t'?2:1),0)};
-const stripStructComment=(line,language)=>{
-  const python=language==='python';let result='',quote='',escaped=false;
-  for(let index=0;index<String(line).length;index++){
-    const char=line[index],next=line[index+1];
-    if(quote){result+=char;if(escaped)escaped=false;else if(char==='\\')escaped=true;else if(char===quote)quote='';continue}
-    if(char==='"'||char==="'"){quote=char;result+=char;continue}
-    if((python&&char==='#')||(!python&&char==='/'&&next==='/'))break;
-    result+=char;
-  }
-  return result.trim();
-};
-const structClassInfo=(header,language)=>{
-  const text=header.trim().replace(/[:{]\s*$/,'').trim();
-  if(language==='python'){
-    const match=text.match(/^class\s+([A-Za-z_]\w*)(?:\s*\(([^)]*)\))?$/);if(!match)return null;
-    return {name:match[1],bases:(match[2]||'').split(',').map(value=>value.trim()).filter(Boolean)};
-  }
-  const match=text.match(/(?:^|\s)class\s+([A-Za-z_$][\w$]*)(?:\s+extends\s+([A-Za-z_$][\w$.]*))?(?:\s*:\s*([\w$.,\s]+))?(?:\s+implements\s+([\w$.,\s]+))?/);
-  if(!match)return null;
-  return {name:match[1],bases:[match[2],match[3],match[4]].filter(Boolean).flatMap(value=>value.split(',')).map(value=>value.trim()).filter(Boolean)};
-};
-const structFunctionInfo=(header,language)=>{
-  const text=header.trim().replace(/[:{]\s*$/,'').trim();
-  if(language==='python'){
-    const match=text.match(/^(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*(?:->\s*[^:]+)?$/);if(!match)return null;
-    return {name:match[1],params:match[2],signature:`${text.replace(/^async\s+/,'')}`};
-  }
-  let match=text.match(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)/);if(match)return {name:match[1],params:match[2],signature:text};
-  match=text.match(/^(?:(?:public|private|protected|internal|static|async|final|virtual|override|abstract|sealed|export|default|inline|constexpr)\s+)*(?:(?:[A-Za-z_$][\w$<>\[\],.?]*|void|int|double|float|boolean|bool|string|String)\s+)?([A-Za-z_$~][\w$]*)\s*\(([^)]*)\)\s*(?:const)?\s*(?:=>)?$/);
-  if(!match||/^(if|for|while|switch|catch)$/i.test(match[1]))return null;
-  return {name:match[1],params:match[2],signature:text};
-};
-const structHeaderNode=(header,language)=>{
-  const text=header.trim().replace(/[:{]\s*$/,'').trim(),classInfo=structClassInfo(text,language);
-  if(classInfo)return structNode('class',{name:classInfo.name,bases:classInfo.bases});
-  const isPython=language==='python';
-  const matchFor=(pattern)=>text.match(pattern)?.[1]?.trim()||'';
-  if(isPython){
-    if(/^if\s+/.test(text))return structNode('if',{condition:matchFor(/^if\s+(.+)$/),branches:[structBranch('Ja',matchFor(/^if\s+(.+)$/))]});
-    if(/^for\s+/.test(text))return structNode('loop',{loopKind:'for',condition:matchFor(/^for\s+(.+)$/)});
-    if(/^while\s+/.test(text))return structNode('loop',{loopKind:'while',condition:matchFor(/^while\s+(.+)$/)});
-    if(/^with\s+/.test(text))return structNode('block',{blockKind:'with',condition:matchFor(/^with\s+(.+)$/)});
-    if(/^try$/.test(text))return structNode('try',{branches:[structBranch('Versuch')]});
-    if(/^match\s+/.test(text))return structNode('switch',{condition:matchFor(/^match\s+(.+)$/),branches:[]});
-    const functionInfo=structFunctionInfo(text,language);if(functionInfo)return structNode('function',functionInfo);
-    return null;
-  }
-  if(/^if\s*\(/.test(text))return structNode('if',{condition:matchFor(/^if\s*\((.*)\)$/),branches:[structBranch('Ja',matchFor(/^if\s*\((.*)\)$/))]});
-  if(/^for\s*\(/.test(text))return structNode('loop',{loopKind:'for',condition:matchFor(/^for\s*\((.*)\)$/)});
-  if(/^while\s*\(/.test(text))return structNode('loop',{loopKind:'while',condition:matchFor(/^while\s*\((.*)\)$/)});
-  if(/^do$/.test(text))return structNode('loop',{loopKind:'do',condition:'mindestens einmal'});
-  if(/^switch\s*\(/.test(text))return structNode('switch',{condition:matchFor(/^switch\s*\((.*)\)$/),branches:[]});
-  if(/^try$/.test(text))return structNode('try',{branches:[structBranch('Versuch')]});
-  const functionInfo=structFunctionInfo(text,language);if(functionInfo)return structNode('function',functionInfo);
-  return null;
-};
-const structPrimaryChildren=node=>node.type==='if'||node.type==='try'?node.branches[0].children:node.children;
-const structIsElseHeader=(line,language)=>language==='python'?/^(elif\s+.+|else)\s*:?$/.test(line):/^else(?:\s+if\s*\(.*\))?$/.test(line);
-const structElseBranch=(line,language)=>{
-  const text=line.trim().replace(/[:{]\s*$/,'').trim();
-  if(language==='python'&&/^elif\s+/.test(text)){const condition=text.replace(/^elif\s+/,'').trim();return structBranch(`Sonst wenn: ${condition}`,condition)}
-  const braceMatch=text.match(/^else\s+if\s*\((.*)\)$/);if(braceMatch)return structBranch(`Sonst wenn: ${braceMatch[1].trim()}`,braceMatch[1].trim());
-  return structBranch('Nein');
-};
-const structCatchBranch=(line,language)=>{
-  const text=line.trim().replace(/[:{]\s*$/,'').trim();
-  if(/^(finally|final)$/.test(text))return structBranch('Immer ausführen');
-  return structBranch(text.replace(/^(except|catch)\s*/,'')||'Fehlerfall');
-};
-const structBraceTokens=source=>{
-  const tokens=[],push=()=>{const value=buffer.trim();if(value)tokens.push(value);buffer='';};let buffer='',quote='',escaped=false,lineComment=false,blockComment=false;
-  for(let index=0;index<String(source).length;index++){
-    const char=source[index],next=source[index+1];
-    if(lineComment){if(char==='\n'){lineComment=false;push()}continue}
-    if(blockComment){if(char==='*'&&next==='/'){blockComment=false;index++}continue}
-    if(quote){buffer+=char;if(escaped)escaped=false;else if(char==='\\')escaped=true;else if(char===quote)quote='';continue}
-    if(char==='"'||char==="'"||char==='`'){quote=char;buffer+=char;continue}
-    if(char==='/'&&next==='/'){lineComment=true;continue}
-    if(char==='/'&&next==='*'){blockComment=true;index++;continue}
-    if(char==='{'||char==='}'){push();tokens.push(char);continue}
-    if(char==='\n'){push();continue}
-    buffer+=char;
-  }
-  push();return tokens;
-};
-const parsePythonStructure=(source,language='python')=>{
-  const root=[],stack=[{indent:-1,children:root}];
-  for(const rawLine of String(source).replace(/\r/g,'').split('\n')){
-    const line=stripStructComment(rawLine,language);if(!line)continue;const indent=structIndent(rawLine);
-    while(stack.length>1&&stack.at(-1).indent>=indent)stack.pop();
-    const children=stack.at(-1).children;
-    if(structIsElseHeader(line,language)){
-      const previous=children.at(-1);if(previous?.type==='if'){
-        const branch=structElseBranch(line,language);previous.branches.push(branch);stack.push({indent,children:branch.children});continue;
-      }
-    }
-    if(/^(except\b.*|finally)\s*:?$/.test(line)){
-      const previous=children.at(-1);if(previous?.type==='try'){
-        const branch=structCatchBranch(line,language);previous.branches.push(branch);stack.push({indent,children:branch.children});continue;
-      }
-    }
-    if(/^case\s+.+\s*:?$/.test(line)){
-      const previous=children.at(-1);if(previous?.type==='switch'){
-        const branch=structBranch(line.replace(/^case\s+|:\s*$/g,''));previous.branches.push(branch);stack.push({indent,children:branch.children});continue;
-      }
-    }
-    const header=line.endsWith(':')?structHeaderNode(line,language):null;
-    const node=header||structNode('statement',{text:line});children.push(node);
-    if(header)stack.push({indent,children:structPrimaryChildren(node)});
-  }
-  return root;
-};
-const parseBraceStructure=(source,language)=>{
-  const root=[],stack=[{node:null,children:root}],tokens=structBraceTokens(source);let pending=null,lastClosed=null;
-  for(let index=0;index<tokens.length;index++){
-    const token=tokens[index];
-    if(token==='{'){if(pending){stack.push({node:pending.node,children:pending.children});pending=null;lastClosed=null}else stack.push({node:null,children:stack.at(-1).children});continue}
-    if(token==='}'){if(stack.length>1)lastClosed=stack.pop().node;pending=null;continue}
-    const line=token.trim();if(!line)continue;
-    if(structIsElseHeader(line,language)&&lastClosed?.type==='if'){
-      const branch=structElseBranch(line,language);lastClosed.branches.push(branch);pending={node:lastClosed,children:branch.children};lastClosed=null;continue;
-    }
-    if(/^(catch\b.*|finally)\s*$/.test(line)&&lastClosed?.type==='try'){
-      const branch=structCatchBranch(line,language);lastClosed.branches.push(branch);pending={node:lastClosed,children:branch.children};lastClosed=null;continue;
-    }
-    const switchNode=[...stack].reverse().find(entry=>entry.node?.type==='switch')?.node;
-    if(/^(case\s+.+:|default:)\s*$/.test(line)&&switchNode){
-      const branch=structBranch(line.replace(/^(case\s+|default\s*:?)/,'').replace(/:$/,'').trim()||'Standard');switchNode.branches.push(branch);stack.at(-1).children=branch.children;continue;
-    }
-    const next=tokens[index+1],header=next==='{'?structHeaderNode(line,language):null;
-    if(header){stack.at(-1).children.push(header);pending={node:header,children:structPrimaryChildren(header)};lastClosed=null;continue}
-    stack.at(-1).children.push(structNode('statement',{text:line.replace(/;\s*$/,'').trim()}));lastClosed=null;
-  }
-  return root;
-};
-const parseStructuredCode=(source,language)=>language==='python'?parsePythonStructure(source,language):parseBraceStructure(source,language);
-const structFindNode=(nodes,id)=>{
-  for(const node of nodes){if(node.id===id)return node;const found=structFindNode(node.children||[],id)||((node.branches||[]).map(branch=>structFindNode(branch.children,id)).find(Boolean));if(found)return found}
-  return null;
-};
-const removeStructNode=(nodes,id)=>{
-  const index=nodes.findIndex(node=>node.id===id);if(index>=0){nodes.splice(index,1);return true}
-  return nodes.some(node=>removeStructNode(node.children||[],id)||(node.branches||[]).some(branch=>removeStructNode(branch.children,id)));
-};
-const structCountNodes=nodes=>nodes.reduce((count,node)=>count+1+structCountNodes(node.children||[])+(node.branches||[]).reduce((sum,branch)=>sum+structCountNodes(branch.children),0),0);
-const structIndentCode=(code,level)=>String(code||'').split('\n').map(line=>`${'  '.repeat(level)}${line}`).join('\n');
-const structCleanStatement=(text,language)=>{const value=String(text||'').trim();if(!value)return language==='python'?'pass':';';return language!=='python'&&!/[;{}]$/.test(value)?`${value};`:value};
-const structCodeFromNodes=(nodes,language,level=0)=>nodes.map(node=>{
-  const body=structCodeFromNodes(node.children||[],language,level+1)||structIndentCode(structCleanStatement('',language),level+1),py=language==='python';
-  if(node.type==='statement')return structIndentCode(structCleanStatement(node.text,language),level);
-  if(node.type==='class'){const bases=(node.bases||[]).filter(Boolean);const head=py?`class ${node.name||'NeueKlasse'}${bases.length?`(${bases.join(', ')})`:''}`:`class ${node.name||'NeueKlasse'}${bases[0]?` extends ${bases[0]}`:''}`;return py?`${structIndentCode(head+':',level)}\n${body}`:`${structIndentCode(head+' {',level)}\n${body}\n${structIndentCode('}',level)}`}
-  if(node.type==='function'){const signature=py?`def ${node.name||'funktion'}(${node.params||''}):`:(node.signature||`${node.name||'funktion'}(${node.params||''})`)+' {';return py?`${structIndentCode(signature,level)}\n${body}`:`${structIndentCode(signature,level)}\n${body}\n${structIndentCode('}',level)}`}
-  if(node.type==='if'){
-    return (node.branches||[]).map((branch,index)=>{const branchBody=structCodeFromNodes(branch.children,language,level+1)||structIndentCode(structCleanStatement('',language),level+1);if(py){const head=index===0?`if ${node.condition||'Bedingung'}:`:branch.condition?`elif ${branch.condition}:`:'else:';return `${structIndentCode(head,level)}\n${branchBody}`}const head=index===0?`if (${node.condition||'condition'}) {`:branch.condition?`else if (${branch.condition}) {`:'else {';return `${structIndentCode(head,level)}\n${branchBody}\n${structIndentCode('}',level)}`}).join(py?'\n':' else ');
-  }
-  if(node.type==='loop'){const head=py?`${node.loopKind==='for'?'for':'while'} ${node.condition||'Bedingung'}:`:`${node.loopKind==='do'?'do':node.loopKind||'while'} (${node.condition||'condition'}) {`;return py?`${structIndentCode(head,level)}\n${body}`:`${structIndentCode(head,level)}\n${body}\n${structIndentCode('}',level)}`}
-  if(node.type==='switch'){const branches=node.branches||[];if(py)return branches.map(branch=>`${structIndentCode(`if ${node.condition||'wert'} == ${branch.condition||'wert'}:`,level)}\n${structCodeFromNodes(branch.children,language,level+1)||structIndentCode('pass',level+1)}`).join('\n');return `${structIndentCode(`switch (${node.condition||'wert'}) {`,level)}\n${branches.map(branch=>`${structIndentCode(`case ${branch.condition||'wert'}:`,level+1)}\n${structCodeFromNodes(branch.children,language,level+2)||structIndentCode(';',level+2)}\n${structIndentCode('break;',level+2)}`).join('\n')}\n${structIndentCode('}',level)}`}
-  return `${structIndentCode(`${node.blockKind||'try'}${py?':':' {'}`,level)}\n${body}${py?'':`\n${structIndentCode('}',level)}`}`;
-}).join('\n');
-const structLabel=node=>{
-  if(node.type==='statement')return node.text||'Anweisung';if(node.type==='class')return `Klasse ${node.name||'NeueKlasse'}`;if(node.type==='function')return `Methode ${node.name||'funktion'}(${node.params||''})`;if(node.type==='if')return `Wenn ${node.condition||'Bedingung'}`;if(node.type==='loop')return `${node.loopKind==='for'?'Für':'Solange'} ${node.condition||'Bedingung'}`;if(node.type==='switch')return `Auswahl: ${node.condition||'Wert'}`;return `${node.blockKind||node.type}: ${node.condition||''}`.trim();
-};
-const structClasses=nodes=>nodes.flatMap(node=>[...(node.type==='class'?[node]:[]),...structClasses(node.children||[]),...(node.branches||[]).flatMap(branch=>structClasses(branch.children))]);
-const structClassFields=node=>(node.children||[]).filter(child=>child.type==='statement'&&child.text&&!/^(return|throw|break|continue)\b/.test(child.text)).map(child=>child.text);
-const structTextForNode=node=>[node.text,node.signature,node.condition,node.params,...(node.children||[]).flatMap(structTextForNode),...(node.branches||[]).flatMap(branch=>branch.children.flatMap(structTextForNode))].filter(Boolean).join(' ');
-const structDependencies=(node,classes)=>{
-  const text=structTextForNode(node),known=classes.map(item=>item.name).filter(name=>name&&name!==node.name);return known.filter(name=>new RegExp(`\\b(?:new\\s+)?${name}\\b`).test(text));
-};
+export const $=(s,root=document)=>root.querySelector(s);
+export const $$=(s,root=document)=>[...root.querySelectorAll(s)];
+export const esc=escapeHTML;
+const LEGACY_ICONS={branch:'git',sparkle:'fun',game:'game',structure:'structogram',code:'ide',folder:'files',terminal:'terminal',browser:'browser',database:'sql',info:'guide',file:'editor'};
+export const APPS=['terminal','files','editor','ide','browser','settings','taskmgr','calc','git','structogram','game','fun','sql','guide','about','trash','computer','docs','home'];
+const EXTRA_LABELS={git:'Git Graph',structogram:'Struktogramm',game:'OS-Spiel',fun:'Fun Lab',sql:'SQL Studio',guide:'Anleitung',home:'Persönlicher Ordner'};
 
 class DesktopSim{
   constructor(){
     this.desktop=$('#desktop');this.layer=$('#window-layer');this.windows=new Map();this.serial=0;this.z=10;
-    this.servers=new Map();this.python=new PythonRuntime();this.currentOS='win11';this.fs=null;this.db=null;this.git=null;this.konami=[];
-    this.termEngine=new TerminalEngine(this);
-    this.bindUI();this.drawOSPicker();
-    let stored;try{stored=localStorage.getItem('desktopsim-v2-last-os')}catch{}
-    this.setOS(OS_LIST.some(o=>o.id===stored)?stored:'win11',false);
-    if(stored)this.hidePicker();else this.showPicker();
+    this.servers=new Map();this.runtimes=new Runtimes();this.currentOS=null;this.fs=null;this.db=null;this.git=null;this.konami=[];
+    this.termEngine=new TerminalEngine(this);this.chrome=new Chrome(this);this.workspace=1;
+    this.global=this.loadJSON('desktopsim-v3-global',{quickBoot:false,lastOS:null});
+    this.bindGlobal();this.renderLanding();
+    const hash=location.hash.match(/os=(\w+)/)?.[1];
+    if(hash&&OS_LIST.some(o=>o.id===hash))this.start(hash,{fromHash:true});else this.showLanding();
+    setInterval(()=>this.tick(),1000*15);
   }
-  bindUI(){
-    $('#change-os').addEventListener('click',()=>this.showPicker());
-    $('#close-picker').addEventListener('click',()=>this.hidePicker());
-    $('#guide-button').addEventListener('click',()=>this.openGuide());
-    $('#export-button').addEventListener('click',()=>this.exportFiles());
-    $('#os-picker').addEventListener('click',e=>{if(e.target.id==='os-picker')this.hidePicker()});
-    $('#import-input').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{this.fs.import(JSON.parse(await f.text()));this.toast('Dateisystem importiert');this.notifyFiles()}catch(err){alert('Import fehlgeschlagen: '+err.message)}e.target.value=''});
-    document.addEventListener('keydown',e=>{if(e.key==='Escape'){this.stopMatrix();$('#start-menu').classList.add('hidden');return}if((e.ctrlKey||e.metaKey)&&e.altKey&&e.key.toLowerCase()==='t'){e.preventDefault();this.openTerminal()}const sequence=['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];this.konami=[...this.konami,e.key.length===1?e.key.toLowerCase():e.key].slice(-sequence.length);if(sequence.every((key,index)=>this.konami[index]===key)){this.konami=[];this.launchConfetti();this.toast('Konami! Party-Modus aktiviert ✨')}});
-    this.desktop.addEventListener('pointerdown',e=>{if(!e.target.closest('.start-menu, .start-trigger, .task-launch'))$('#start-menu').classList.add('hidden')});
-    window.addEventListener('resize',()=>this.keepInBounds());
+  // ---------- Speicher ----------
+  loadJSON(key,fallback){try{return{...fallback,...(JSON.parse(localStorage.getItem(key))||{})}}catch{return{...fallback}}}
+  saveJSON(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{}}
+  get settings(){return this._settings||(this._settings=this.loadJSON('desktopsim-v3-settings-'+this.currentOS,{theme:null,wallpaper:0,accent:null,icons:{},firstBootDone:false,psPolicy:null,textScale:1}))}
+  getSetting(k){return this.settings[k]}
+  setSetting(k,v){this.settings[k]=v;this.saveJSON('desktopsim-v3-settings-'+this.currentOS,this.settings);this.applyAppearance()}
+  get profile(){return profileFor(this.currentOS)}
+  appName(id){return this.profile.names[id]||EXTRA_LABELS[id]||id}
+
+  // ---------- Startseite ----------
+  renderLanding(){
+    const groups=[['Windows',['winxp','win7','win8','win10','win11']],['Linux',['debian','arch']],['Apple',['macos']],['Unix',['unix']]];
+    $('#landing-os').innerHTML=groups.map(([label,ids])=>`<section class="lp-group"><h3>${label}</h3><div class="lp-cards">${ids.map(id=>{const o=getOS(id);return`<button class="lp-card" type="button" data-boot="${id}"><span class="lp-preview" data-os="${id}"><span class="lpp-wall"></span><span class="lpp-bar"></span><span class="lpp-win"><i></i></span><span class="lpp-mark">${osMark(id)}</span></span><span class="lp-card-body"><strong>${esc(o.label)}</strong><small>${esc(o.subtitle)}</small></span><span class="lp-year">${o.year}</span></button>`}).join('')}</div></section>`).join('');
+    $('#landing-os').addEventListener('click',e=>{const b=e.target.closest('[data-boot]');if(b)this.start(b.dataset.boot)});
+    $('#landing-continue').addEventListener('click',()=>this.start(this.global.lastOS||'win11'));
+    $('#landing-quickboot').checked=Boolean(this.global.quickBoot);
+    $('#landing-quickboot').addEventListener('change',e=>{this.global.quickBoot=e.target.checked;this.saveJSON('desktopsim-v3-global',this.global)});
   }
-  drawOSPicker(){const groupNames=[...new Set(OS_LIST.map(o=>o.group))];$('#os-grid').innerHTML=groupNames.map(group=>`<div class="os-group"><div class="os-group-label">${escapeHTML(group)}</div><div class="os-options">${OS_LIST.filter(o=>o.group===group).map(o=>`<button class="os-option" data-choice="${o.id}" type="button"><span class="os-option-icon ${o.id}">${escapeHTML(o.symbol)}</span><span class="os-option-body"><strong>${escapeHTML(o.label)}</strong><small>${escapeHTML(o.subtitle)}</small></span><span class="os-option-year">${o.year}</span></button>`).join('')}</div></div>`).join('');$('#os-grid').addEventListener('click',e=>{const el=e.target.closest('[data-choice]');if(!el)return;this.setOS(el.dataset.choice,true);this.hidePicker()})}
-  showPicker(){$('#os-picker').classList.remove('hidden');$('#close-picker').hidden=false;$('#os-grid').querySelectorAll('.os-option').forEach(b=>b.classList.toggle('active',b.dataset.choice===this.currentOS))}
-  hidePicker(){$('#os-picker').classList.add('hidden')}
-  setOS(id,boot=true){
-    for(const win of this.windows.values()){win.cleanup?.();win.element.remove();}this.windows.clear();this.servers.clear();this.python.terminate();this.stopMatrix();this.stopConfetti();this.dismissByte();
-    this.currentOS=id;this.os=getOS(id);this.fs=new VFS(id);this.db=new MiniSQL(id);this.git=new GitLearningRepo(id);this.desktop.dataset.os=id;
-    $('#header-status').textContent=`${this.os.label} · ${this.os.shell.toUpperCase()} · Browser-Sandbox`;
-    try{localStorage.setItem('desktopsim-v2-last-os',id)}catch{}
-    this.renderDesktopIcons();this.renderTaskbar();this.renderMacMenu();this.renderStartMenu();
-    if(boot){this.toast(`${this.os.label} gestartet · Oberfläche wird simuliert`);this.openTerminal()}
+  showLanding(){
+    document.body.classList.add('on-landing');$('#landing').hidden=false;$('#landing-close').hidden=!this.currentOS;
+    const last=this.global.lastOS;const btn=$('#landing-continue');btn.hidden=!last;if(last)btn.querySelector('span').textContent=`Weiter mit ${getOS(last).label}`;
+    $$('.lp-card').forEach(c=>c.classList.toggle('last',c.dataset.boot===last));
+    history.replaceState(null,'',location.pathname+location.search);
   }
-  renderMacMenu(){const menu=$('#mac-menu');menu.hidden=this.currentOS!=='macos';if(this.currentOS==='macos')menu.innerHTML=`<strong class="apple-symbol">●</strong><strong>Finder</strong><span>File</span><span>Edit</span><span>View</span><span>Window</span><span class="mac-menu-clock" id="mac-time"></span>`;}
-  renderDesktopIcons(){
-    $('#desktop-icons').innerHTML=ACTIONS.map(a=>`<button class="desktop-icon" type="button" data-action="${a.id}" aria-label="${escapeHTML(a.label)} öffnen"><span class="icon-tile tile-${a.id}">${svg(iconForAction(a.id),30)}</span><span class="desktop-label">${escapeHTML(a.label)}</span></button>`).join('');
-    $('#desktop-icons').querySelectorAll('.desktop-icon').forEach(el=>{let last=0;el.addEventListener('click',()=>{const now=Date.now();if(now-last<480||matchMedia('(pointer: coarse)').matches)this.launch(el.dataset.action);last=now;})});
+  hideLanding(){document.body.classList.remove('on-landing');$('#landing').hidden=true}
+
+  // ---------- Betriebssystem starten ----------
+  async start(id,opts={}){
+    this.hideLanding();this.setOS(id);
+    this.global.lastOS=id;this.saveJSON('desktopsim-v3-global',this.global);
+    history.replaceState(null,'','#os='+id);
+    await this.chrome.boot(id,{quick:this.global.quickBoot});
+    await this.chrome.login(id,{quick:this.global.quickBoot});
+    this.bootTime=Date.now();this.desktop.classList.add('ready');
+    if(!this.settings.firstBootDone){this.setSetting('firstBootDone',true);setTimeout(()=>this.openGuide(),400);this.notify('Willkommen bei DesktopSim',`${getOS(id).label} ist bereit. Programme laufen echt im Browser – öffne ein Terminal und probiere „cd Projects“ und „${isWindows(id)?'python':'python3'} hello.py“.`,'guide')}
   }
-  launch(action){$('#start-menu').classList.add('hidden');switch(action){case'terminal':return this.openTerminal();case'files':return this.openFiles();case'editor':return this.openEditor();case'ide':return this.openIDE();case'git':return this.openGitGraph();case'structogram':return this.openStructogram();case'game':return this.openGame();case'fun':return this.openFunLab();case'browser':return this.openBrowser();case'sql':return this.openSQL();case'guide':return this.openGuide();case'import':$('#import-input').click();break;case'export':this.exportFiles();break;case'reset':if(confirm(`Virtuelle Dateien und SQL-Daten für ${this.os.label} wirklich zurücksetzen?`)){this.fs.reset();this.db.reset();this.git.reset();this.notifyFiles();this.toast('Virtuelle Daten zurückgesetzt')}break;case'newterminal':return this.openTerminal();}}
-  renderTaskbar(){
-    const wins=[...this.windows.values()];const isMac=this.currentOS==='macos';
-    const openButtons=wins.map(w=>`<button class="task-window ${w.minimized?'task-minimized':''}" type="button" data-activate="${w.id}" title="${escapeHTML(w.title)}"><span>${svg(w.icon,17)}</span><span class="task-window-label">${escapeHTML(w.title)}</span></button>`).join('');
-    const quick=ACTIONS.filter(a=>['terminal','files','editor','ide','git','game'].includes(a.id)).map(a=>`<button type="button" class="task-launch" data-launch="${a.id}" title="${escapeHTML(a.label)}">${svg(iconForAction(a.id),23)}</button>`).join('');
-    const startIcon=isMac?'◉':this.currentOS==='unix'?'◆':this.currentOS==='arch'?'▲':this.currentOS==='debian'?'◈':svg('windows',20);
-    $('#taskbar').innerHTML=`<button type="button" class="start-trigger" title="Menü öffnen"><span class="start-symbol">${startIcon}</span><span class="start-text">${this.currentOS==='winxp'?'Start':''}</span></button><div class="task-divider"></div><div class="quick-launch">${quick}</div><div class="running-tasks">${openButtons}</div><div class="task-tray"><span class="tray-status" title="Rein virtueller Rechner">◉</span><span id="task-clock" class="task-clock"></span></div>`;
-    const bar=$('#taskbar');$('.start-trigger',bar).addEventListener('click',e=>{e.stopPropagation();$('#start-menu').classList.toggle('hidden')});
-    bar.querySelectorAll('[data-launch]').forEach(b=>b.addEventListener('click',()=>this.launch(b.dataset.launch)));
-    bar.querySelectorAll('[data-activate]').forEach(b=>b.addEventListener('click',()=>{const w=this.windows.get(+b.dataset.activate);if(!w)return;if(w.minimized){w.minimized=false;w.element.classList.remove('minimized')}this.focusWindow(w)}));
-    this.tickClock();
+  setOS(id){
+    for(const w of [...this.windows.values()])this.destroyWindow(w);
+    this.windows.clear();this.servers.clear();this.runtimes.stopAll();this.stopMatrix?.();this.stopConfetti?.();this.dismissByte?.();this.chrome.closeMenus();
+    this.currentOS=id;this._settings=null;this.os=getOS(id);this.fs=new VFS(id);this.db=new MiniSQL(id);this.git=new GitLearningRepo(id);this.workspace=1;
+    this.fs.onChange(()=>{clearTimeout(this.fsTimer);this.fsTimer=setTimeout(()=>this.notifyFiles(),60)});
+    this.desktop.dataset.os=id;this.desktop.dataset.family=this.profile.family;this.desktop.className='desktop';
+    document.documentElement.dataset.os=id;
+    $('#header-status').textContent=`${this.os.label} · ${this.os.shell==='cmd'?'CMD':this.os.shell==='powershell'?'PowerShell':this.os.shell}`;
+    this.applyAppearance();this.chrome.render();this.renderDesktopIcons();
   }
-  tickClock(){const txt=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});const t=$('#task-clock');if(t)t.textContent=txt;const mt=$('#mac-time');if(mt)mt.textContent=txt;}
-  renderStartMenu(){const menu=$('#start-menu');const windows8=this.currentOS==='win8',windows11=this.currentOS==='win11';menu.className='start-menu hidden'+(windows8?' metro-menu':'')+(windows11?' win11-start-menu':'');menu.innerHTML=`<div class="start-heading"><span class="start-avatar">${svg('code',25)}</span><span><strong>${windows11?'Angeheftet':'DesktopSim'}</strong><small>${windows11?'Empfohlene Lernwerkzeuge':escapeHTML(this.os.label)+' · Student'}</small></span></div><div class="start-menu-list">${ACTIONS.map(a=>`<button type="button" data-menu-action="${a.id}">${svg(iconForAction(a.id),21)}<span>${escapeHTML(a.label)}</span><small>${escapeHTML(a.detail)}</small></button>`).join('')}</div><div class="start-menu-bottom"><button data-menu-action="import">⇧ Import</button><button data-menu-action="export">⇩ Export</button><button data-menu-action="reset">↺ Zurücksetzen</button></div>`;menu.querySelectorAll('[data-menu-action]').forEach(b=>b.addEventListener('click',()=>this.launch(b.dataset.menuAction)))}
-  toast(message){const n=$('#desktop-notice');n.textContent=message;n.classList.add('visible');clearTimeout(this.toastTimer);this.toastTimer=setTimeout(()=>n.classList.remove('visible'),3700)}
-  makeWindow(kind,title,icon='file',preferred={}){
-    const id=++this.serial,deskW=this.desktop.clientWidth,deskH=this.desktop.clientHeight;
-    const width=Math.min(preferred.width||730,Math.max(290,deskW-30));
-    const height=Math.min(preferred.height||480,Math.max(260,deskH-85));
-    const offset=(this.windows.size%7)*32;
-    const left=Math.max(8,Math.min(125+offset,deskW-width-8));const top=Math.max(this.currentOS==='macos'?40:12,Math.min(45+offset,deskH-height-55));
-    const el=document.createElement('section');el.className='sim-window';el.dataset.window=id;el.setAttribute('role','dialog');el.setAttribute('aria-label',title);
-    el.style.cssText=`width:${width}px;height:${height}px;left:${left}px;top:${top}px;z-index:${++this.z}`;
-    el.innerHTML=`<div class="window-titlebar"><div class="window-dots"><button type="button" data-wbtn="close" aria-label="Schließen"></button><button type="button" data-wbtn="min" aria-label="Minimieren"></button><button type="button" data-wbtn="max" aria-label="Maximieren"></button></div><span class="title-app-icon">${svg(icon,16)}</span><span class="window-title">${escapeHTML(title)}</span><div class="window-controls"><button type="button" data-wbtn="min" title="Minimieren">—</button><button type="button" data-wbtn="max" title="Maximieren">□</button><button type="button" data-wbtn="close" title="Schließen">×</button></div></div><div class="window-content"></div>`;
-    this.layer.append(el);const win={id,kind,title,icon,element:el,content:$('.window-content',el),minimized:false,maximized:false,restore:{left,top,width,height}};
-    this.windows.set(id,win);
-    el.addEventListener('pointerdown',()=>this.focusWindow(win));
-    el.querySelectorAll('[data-wbtn]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();const a=b.dataset.wbtn;if(a==='close')this.closeWindowById(id);if(a==='min')this.minimizeWindow(win);if(a==='max')this.toggleMax(win)}));
-    this.attachDragging(win);this.focusWindow(win);this.renderTaskbar();return win;
+  applyAppearance(){
+    const s=this.settings,d=this.desktop;if(!d)return;
+    const dark=s.theme?s.theme==='dark':['win11','win10','debian','arch'].includes(this.currentOS)?false:false;
+    d.dataset.theme=s.theme||'default';d.classList.toggle('theme-dark',Boolean(s.theme==='dark'));d.classList.toggle('theme-light',Boolean(s.theme==='light'));
+    d.dataset.wallpaper=String(s.wallpaper||0);
+    if(s.accent)d.style.setProperty('--accent',s.accent);else d.style.removeProperty('--accent');
+    d.style.setProperty('--ui-scale',String(s.textScale||1));
+    void dark;
   }
-  attachDragging(win){const bar=$('.window-titlebar',win.element);let drag=null;
-    bar.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('button')||win.maximized)return;drag={x:e.clientX,y:e.clientY,left:win.element.offsetLeft,top:win.element.offsetTop};bar.setPointerCapture(e.pointerId);e.preventDefault()});
-    bar.addEventListener('pointermove',e=>{if(!drag)return;const deskW=this.desktop.clientWidth,deskH=this.desktop.clientHeight,el=win.element;el.style.left=Math.max(0,Math.min(deskW-70,drag.left+e.clientX-drag.x))+'px';el.style.top=Math.max(this.currentOS==='macos'?28:0,Math.min(deskH-80,drag.top+e.clientY-drag.y))+'px'});
-    const end=()=>drag=null;bar.addEventListener('pointerup',end);bar.addEventListener('lostpointercapture',end);
-    bar.addEventListener('dblclick',e=>{if(!e.target.closest('button'))this.toggleMax(win)});
-  }
-  closeWindowById(id){const w=this.windows.get(+id);if(!w)return;w.cleanup?.();w.element.remove();this.windows.delete(+id);this.renderTaskbar()}
-  focusWindow(w){w.element.style.zIndex=++this.z;w.element.classList.remove('inactive');for(const other of this.windows.values())if(other!==w)other.element.classList.add('inactive')}
-  minimizeWindow(w){w.minimized=true;w.element.classList.add('minimized');this.renderTaskbar()}
-  toggleMax(w){const e=w.element;if(!w.maximized){w.restore={left:e.offsetLeft,top:e.offsetTop,width:e.offsetWidth,height:e.offsetHeight};w.maximized=true;e.classList.add('maximized');}else{w.maximized=false;e.classList.remove('maximized');Object.assign(e.style,{left:w.restore.left+'px',top:w.restore.top+'px',width:w.restore.width+'px',height:w.restore.height+'px'})}this.focusWindow(w)}
-  keepInBounds(){for(const w of this.windows.values()){if(w.maximized)continue;w.element.style.left=Math.min(w.element.offsetLeft,Math.max(0,this.desktop.clientWidth-100))+'px';w.element.style.top=Math.min(w.element.offsetTop,Math.max(0,this.desktop.clientHeight-90))+'px'}}
-  updateTitle(w,title){w.title=title;$('.window-title',w.element).textContent=title;this.renderTaskbar()}
-  updateTerminalTitle(t){const w=this.windows.get(t.windowId);if(w)this.updateTitle(w,`${t.shell==='powershell'?'PowerShell':t.shell==='cmd'?'Eingabeaufforderung':t.shell} · ${this.os.label}`)}
-  openTerminal(){
-    const w=this.makeWindow('terminal',`${this.os.shell==='cmd'?'Eingabeaufforderung':this.os.shell==='powershell'?'PowerShell':this.os.shell} · ${this.os.label}`,'terminal',{width:760,height:490});
-    const t={windowId:w.id,os:this.currentOS,shell:this.os.shell,cwd:joinPath(homePath(this.currentOS),'Projects'),sqlMode:false,history:[],historyIndex:0,admin:false};w.terminal=t;
-    w.content.className='window-content terminal-content';w.content.innerHTML=`<div class="terminal-toolbar"><span class="terminal-connection"><span class="dot-live"></span> ${escapeHTML(this.os.label)} <span class="muted">/ ${escapeHTML(this.os.shell)}</span></span><div><button type="button" data-terminal-new title="Weiteres Terminal">${svg('plus',15)} <span>Neues Fenster</span></button><button type="button" data-terminal-stop title="Python-Ausführung unterbrechen">Stop Python</button><button type="button" data-terminal-clear>Leeren</button></div></div><div class="terminal-scroll" tabindex="0" aria-label="Terminal-Ausgabe"><div class="terminal-lines"></div><form class="terminal-input-row" autocomplete="off"><label class="terminal-prompt"></label><input class="terminal-input" aria-label="Befehl eingeben" autocapitalize="off" spellcheck="false" autocorrect="off"><button class="terminal-run" aria-label="Befehl ausführen" type="submit">↵</button></form></div><div class="terminal-foot">↑↓ Verlauf <span>·</span> Tab vervollständigen <span>·</span> Ctrl+L leeren <span>·</span> <strong>help</strong> zeigt alle Befehle</div>`;
-    const input=$('.terminal-input',w.content),form=$('.terminal-input-row',w.content),lines=$('.terminal-lines',w.content),scroll=$('.terminal-scroll',w.content),lab=$('.terminal-prompt',w.content);
-    const sync=()=>{lab.textContent=promptFor(t);scroll.scrollTop=scroll.scrollHeight;};
-    const append=(value,kind='normal')=>{if(!value)return;const p=document.createElement('pre');p.className='terminal-line '+kind;p.textContent=String(value).slice(0,50000);lines.append(p);scroll.scrollTop=scroll.scrollHeight;};
-    append(`DesktopSim · ${this.os.label} · ${t.shell}\nDies ist eine Browser-Simulation, keine echte Betriebssystem-Shell.\nTippe "help" für unterstützte Befehle.`, 'intro');sync();
-    form.addEventListener('submit',async e=>{e.preventDefault();if(input.disabled)return;const cmd=input.value;const executed=promptFor(t);input.value='';if(!cmd.trim()){sync();return}t.history.push(cmd);t.historyIndex=t.history.length;append(executed+' '+cmd,'command');input.disabled=true;const working=document.createElement('pre');working.className='terminal-line processing';working.textContent='Befehl wird verarbeitet …';lines.append(working);scroll.scrollTop=scroll.scrollHeight;
-      try{const result=await this.termEngine.execute(cmd,t);working.remove();if(result==='__CLEAR__')lines.innerHTML='';else append(result,'output');this.notifyFiles()}catch(err){working.remove();append('Fehler: '+err.message,'error')}finally{input.disabled=false;sync();input.focus()}
+
+  // ---------- Globale Bedienung ----------
+  bindGlobal(){
+    $('#change-os').addEventListener('click',()=>this.showLanding());
+    $('#guide-button').addEventListener('click',()=>this.currentOS?this.openGuide():this.showLanding());
+    $('#fullscreen-button').addEventListener('click',()=>this.toggleFullscreen());
+    $('#landing-close')?.addEventListener('click',()=>{if(this.currentOS)this.hideLanding()});
+    $('#import-input').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{this.fs.import(JSON.parse(await f.text()));this.notify('Import','Dateisystem importiert.','files');this.notifyFiles();this.renderDesktopIcons()}catch(err){this.notify('Import fehlgeschlagen',err.message,'about')}e.target.value=''});
+    document.addEventListener('fullscreenchange',()=>document.body.classList.toggle('kiosk',Boolean(document.fullscreenElement)));
+    document.addEventListener('keydown',e=>{
+      if(!this.currentOS||document.body.classList.contains('on-landing'))return;
+      if(e.key==='Escape'){this.stopMatrix?.();if(this.chrome.closeMenus()||this.chrome.exitOverview())e.preventDefault();return}
+      const k=e.key.toLowerCase();
+      if(e.ctrlKey&&e.altKey&&k==='t'){e.preventDefault();this.launch('terminal');return}
+      if(e.ctrlKey&&e.shiftKey&&k==='escape'){e.preventDefault();this.launch('taskmgr');return}
+      if(e.ctrlKey&&!e.altKey&&!e.shiftKey&&k==='escape'){e.preventDefault();this.chrome.toggleLauncher();return}
+      if(e.ctrlKey&&k===' '&&this.currentOS==='macos'){e.preventDefault();this.chrome.spotlight();return}
+      if(e.ctrlKey&&e.altKey&&k==='d'){e.preventDefault();this.showDesktop();return}
+      if(e.ctrlKey&&e.altKey&&k==='o'){e.preventDefault();this.chrome.toggleOverview();return}
+      const seq=['arrowup','arrowup','arrowdown','arrowdown','arrowleft','arrowright','arrowleft','arrowright','b','a'];this.konami=[...this.konami,k].slice(-10);if(seq.every((x,i)=>this.konami[i]===x)){this.konami=[];this.launchConfetti?.();this.toast('Konami! Party-Modus aktiviert ✨')}
     });
-    input.addEventListener('keydown',e=>{if(e.key==='ArrowUp'){e.preventDefault();if(t.history.length){t.historyIndex=Math.max(0,t.historyIndex-1);input.value=t.history[t.historyIndex]||''}}if(e.key==='ArrowDown'){e.preventDefault();t.historyIndex=Math.min(t.history.length,t.historyIndex+1);input.value=t.history[t.historyIndex]||''}if(e.key==='Tab'){e.preventDefault();const options=this.termEngine.completions(input.value,t);if(options.length===1)input.value=input.value.replace(/[^\s]*$/,options[0]);else if(options.length>1)append(options.slice(0,20).join('  '),'muted')}if(e.ctrlKey&&e.key.toLowerCase()==='l'){e.preventDefault();lines.innerHTML=''}});
-    $('[data-terminal-new]',w.content).addEventListener('click',()=>this.openTerminal());
-    $('[data-terminal-clear]',w.content).addEventListener('click',()=>{lines.innerHTML='';input.focus()});
-    $('[data-terminal-stop]',w.content).addEventListener('click',()=>{this.python.terminate();this.toast('Python-Worker gestoppt')});
-    scroll.addEventListener('click',e=>{if(!e.target.closest('button'))input.focus()});setTimeout(()=>input.focus(),50);return w;
+    window.addEventListener('resize',()=>this.keepInBounds());
+    // Matrix/Konfetti/Byte stammen aus classic.js und erwarten ein Toast-Fach.
   }
-  openFiles(initial){
-    const w=this.makeWindow('files',`Dateimanager · ${this.os.label}`,'folder',{width:780,height:490});const state={path:initial||homePath(this.currentOS),selected:null};
-    w.content.className='window-content file-manager';
-    const render=()=>{let items=[];try{items=this.fs.list(state.path)}catch{state.path=homePath(this.currentOS);items=this.fs.list(state.path)}
-      const favorites=[['Home',homePath(this.currentOS)],['Desktop',joinPath(homePath(this.currentOS),'Desktop')],['Dokumente',joinPath(homePath(this.currentOS),'Documents')],['Projekte',joinPath(homePath(this.currentOS),'Projects')],['Root', '/']];
-      w.content.innerHTML=`<div class="file-toolbar"><button data-file-nav="up" title="Übergeordneter Ordner">←</button><button data-file-nav="home" title="Home">${svg('home',16)}</button><input class="file-address" aria-label="Dateipfad" value="${escapeHTML(pathDisplay(this.currentOS,state.path))}"><button data-file-nav="go">Öffnen</button><button data-file-op="folder">+ Ordner</button><button data-file-op="new">+ Datei</button></div><div class="file-main"><aside class="file-sidebar"><strong>Orte</strong>${favorites.map(([name,path])=>`<button data-go="${escapeHTML(path)}" class="${path===state.path?'selected':''}">${svg(path==='/'?'server':'folder',16)}${escapeHTML(name)}</button>`).join('')}</aside><div class="file-body"><div class="file-column-head"><span>Name</span><span>Typ</span><span>Größe</span></div><div class="file-rows">${items.map(item=>`<button type="button" class="file-row ${state.selected===item.name?'selected':''}" data-entry="${escapeHTML(item.name)}" data-entry-type="${item.type}"><span>${svg(item.type==='dir'?'folder':'file',22)}${escapeHTML(item.name)}</span><span>${item.type==='dir'?'Ordner':extName(item.name).toUpperCase()+'-Datei'}</span><span>${item.type==='dir'?'–':item.size+' B'}</span></button>`).join('')||'<div class="file-empty">Dieser Ordner ist leer.</div>'}</div></div></div><div class="file-status"><span>${items.length} Element(e) · ${escapeHTML(pathDisplay(this.currentOS,state.path))}</span><div><button data-file-op="edit">Öffnen</button><button data-file-op="delete">Löschen</button><button data-file-op="download">Download</button></div></div>`;
-      const nav=v=>{state.path=this.fs.normalize(v,state.path);state.selected=null;render()};
-      w.content.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.go)));
-      w.content.querySelectorAll('[data-entry]').forEach(b=>{b.addEventListener('click',()=>{state.selected=b.dataset.entry;w.content.querySelectorAll('.file-row').forEach(r=>r.classList.toggle('selected',r===b))});b.addEventListener('dblclick',()=>{if(b.dataset.entryType==='dir')nav(joinPath(state.path,b.dataset.entry));else this.openEditor(b.dataset.entry,state.path)})});
-      w.content.querySelectorAll('[data-file-nav]').forEach(b=>b.addEventListener('click',()=>{const a=b.dataset.fileNav;if(a==='up')nav('..');else if(a==='home')nav(homePath(this.currentOS));else nav($('.file-address',w.content).value)}));
-      $('.file-address',w.content).addEventListener('keydown',e=>{if(e.key==='Enter')nav(e.target.value)});
-      w.content.querySelectorAll('[data-file-op]').forEach(b=>b.addEventListener('click',()=>{const a=b.dataset.fileOp;try{if(a==='folder'){const n=prompt('Ordnername:');if(n)this.fs.mkdir(joinPath(state.path,n))}if(a==='new'){const n=prompt('Dateiname (z. B. test.py):');if(n)this.fs.write(joinPath(state.path,n),'')}if(a==='edit'){if(!state.selected)return this.toast('Bitte Datei auswählen');const target=joinPath(state.path,state.selected);if(this.fs.locate(target)?.type==='dir')return nav(target);this.openEditor(target)}if(a==='delete'){if(!state.selected)return this.toast('Bitte Eintrag auswählen');if(confirm(`${state.selected} wirklich löschen?`)){this.fs.remove(joinPath(state.path,state.selected),null,true);state.selected=null}}if(a==='download'){if(!state.selected)return this.toast('Bitte Datei auswählen');this.downloadText(state.selected,this.fs.read(joinPath(state.path,state.selected)))}render();this.notifyFiles()}catch(e){this.toast(e.message)}}));
-    };w.refresh=render;render();return w;
-  }
-  openEditor(file='hello.py',cwd=joinPath(homePath(this.currentOS),'Projects')){
-    const full=this.fs.normalize(file,cwd);const w=this.makeWindow('editor',`Editor · ${full.split('/').pop()}`,'code',{width:780,height:560});const ext=extName(full);
-    let code='';try{code=this.fs.read(full)}catch{code=ext==='py'?'print("Hallo Welt!")\n':ext==='html'?'<!doctype html>\n<h1>Hallo Welt!</h1>\n':''}
-    w.content.className='window-content editor-content';
-    w.content.innerHTML=`<div class="editor-toolbar"><span class="editor-filename">${svg('file',17)} <span>${escapeHTML(pathDisplay(this.currentOS,full))}</span></span><div><button type="button" data-editor="save">${svg('save',16)} Speichern</button><button type="button" data-editor="run" class="accent-action">${svg('play',16)} ${ext==='html'?'Vorschau':'Ausführen'}</button></div></div><div class="editor-layout"><div class="editor-input-wrap"><div class="editor-language">${escapeHTML(ext.toUpperCase())} <span>UTF-8 · DesktopSim</span></div><textarea class="editor-text" spellcheck="false" aria-label="Quelltext bearbeiten"></textarea></div><div class="editor-output"><div class="editor-output-title">AUSGABE <button type="button" data-editor="clear">Leeren</button></div><pre class="editor-result">Datei ändern und „Ausführen“ wählen.\nPython nutzt Pyodide (Internet beim ersten Start).\nJava / C / C++ / C# / PHP / JS: Quelltextprüfung und Ausgabe-Demo.</pre></div></div>`;
-    const area=$('.editor-text',w.content),out=$('.editor-result',w.content);area.value=code;
-    const save=()=>{this.fs.write(full,area.value);this.notifyFiles();this.toast('Gespeichert: '+full.split('/').pop())};
-    w.content.querySelectorAll('[data-editor]').forEach(b=>b.addEventListener('click',async()=>{const action=b.dataset.editor;if(action==='clear')return out.textContent='';if(action==='save'){try{save()}catch(e){out.textContent=e.message}return;}if(action==='run'){b.disabled=true;out.textContent='Wird ausgeführt …';try{if(ext==='html'||ext==='htm'){this.openBrowser(full,null,area.value);out.textContent='HTML-Vorschau im Browserfenster geöffnet (Sandbox).'}else if(ext==='py'){out.textContent=await this.termEngine.runPython(area.value)}else if(ext==='sql'){const data=this.db.run(area.value);out.textContent=data.message+(data.columns.length?'\n'+data.columns.join(' | ')+'\n'+data.rows.map(r=>data.columns.map(c=>r[c]).join(' | ')).join('\n'):'')}else if(['java','cs','php','cpp','c','js','mjs'].includes(ext)){const language=ext==='cs'?'cs':['cpp','c','java','php'].includes(ext)?ext:'js',res=simulateCompiled(language,area.value);out.textContent=(res.output||'')+'\n\n'+res.detail}else out.textContent='Für diesen Dateityp gibt es keinen Ausführungsmodus. Speichern und im Dateimanager öffnen.';}catch(e){out.textContent='Fehler: '+e.message}finally{b.disabled=false}}}));
-    area.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();try{save()}catch(err){out.textContent=err.message}}if(e.key==='Tab'){e.preventDefault();const s=area.selectionStart;area.setRangeText('  ',s,area.selectionEnd,'end')}});return w;
-  }
-  openIDE(file='hello.py',cwd=joinPath(homePath(this.currentOS),'Projects')){
-    const projectRoot=joinPath(homePath(this.currentOS),'Projects');let initial=this.fs.normalize(file,cwd);
-    if(this.fs.locate(initial)?.type!=='file')initial=joinPath(projectRoot,'hello.py');
-    const w=this.makeWindow('ide',`IDE · ${initial.split('/').pop()}`,'code',{width:1020,height:680});const state={path:initial,dirty:false};
-    w.content.className='window-content ide-content';
-    w.content.innerHTML=`<div class="ide-shell"><nav class="ide-activity" aria-label="IDE-Bereiche"><button type="button" class="ide-activity-active" title="Explorer">${svg('folder',20)}</button><button type="button" title="Suche">${svg('search',20)}</button><button type="button" title="Quellcode">${svg('code',20)}</button></nav><aside class="ide-explorer"><div class="ide-explorer-heading"><span>EXPLORER</span><button type="button" data-ide="new" title="Neue Datei">${svg('plus',16)}</button></div><div class="ide-project-name">▾ PROJECTS</div><div class="ide-file-list"></div></aside><section class="ide-workbench"><header class="ide-toolbar"><span>DesktopSim IDE</span><div><button type="button" data-ide="save">${svg('save',15)} Speichern</button><button type="button" data-ide="run" class="ide-run">${svg('play',14)} Ausführen</button></div></header><div class="ide-tabs"><button type="button" class="ide-tab ide-tab-active"><span class="ide-dirty-dot"></span><span class="ide-tab-name"></span><span aria-hidden="true">×</span></button></div><div class="ide-editor-stage"><pre class="ide-line-numbers" aria-hidden="true"></pre><div class="ide-code-scroll"><pre class="ide-highlight" aria-hidden="true"><code></code></pre><textarea class="ide-textarea" spellcheck="false" autocapitalize="off" autocorrect="off" aria-label="Quelltext in der IDE bearbeiten"></textarea></div></div><section class="ide-output-panel"><div class="ide-output-heading"><span>AUSGABE</span><div><button type="button" data-ide="terminal">Terminal</button><button type="button" data-ide="clear" aria-label="Ausgabe leeren">×</button></div></div><pre class="ide-result">Bereit. Ctrl+S speichert · Ctrl+Enter führt den Code aus.</pre></section><footer class="ide-statusbar"><span>○ main</span><span class="ide-cursor-status">Ln 1, Col 1</span><span>UTF-8</span><span class="ide-language-status">Plain Text</span><span>DesktopSim</span></footer></section></div>`;
-    const area=$('.ide-textarea',w.content),highlight=$('.ide-highlight code',w.content),highlightBox=$('.ide-highlight',w.content),lineNumbers=$('.ide-line-numbers',w.content),fileList=$('.ide-file-list',w.content),result=$('.ide-result',w.content),tabName=$('.ide-tab-name',w.content),dirtyDot=$('.ide-dirty-dot',w.content),cursorStatus=$('.ide-cursor-status',w.content),languageStatus=$('.ide-language-status',w.content);
-    const language=()=>IDE_LANGUAGES[extName(state.path)]||'Plain Text';
-    const update=()=>{const ext=extName(state.path),lines=area.value.split('\n'),before=area.value.slice(0,area.selectionStart).split('\n');highlight.innerHTML=ideSyntaxHTML(area.value,ext);lineNumbers.textContent=lines.map((_,index)=>index+1).join('\n');tabName.textContent=state.path.split('/').pop();dirtyDot.classList.toggle('visible',state.dirty);cursorStatus.textContent=`Ln ${before.length}, Col ${before.at(-1).length+1}`;languageStatus.textContent=language();};
-    const syncScroll=()=>{highlightBox.scrollTop=area.scrollTop;highlightBox.scrollLeft=area.scrollLeft;lineNumbers.scrollTop=area.scrollTop;};
-    const save=(notice=true)=>{this.fs.write(state.path,area.value);state.dirty=false;update();refreshExplorer();this.notifyFiles();if(notice)this.toast('Gespeichert: '+state.path.split('/').pop())};
-    const switchFile=path=>{if(state.dirty)save(false);state.path=path;area.value=this.fs.read(path);state.dirty=false;this.updateTitle(w,`IDE · ${path.split('/').pop()}`);update();syncScroll();refreshExplorer();area.focus();};
-    const refreshExplorer=()=>{const files=this.fs.list(projectRoot).filter(entry=>entry.type==='file');fileList.innerHTML=files.map(entry=>{const path=joinPath(projectRoot,entry.name),active=path===state.path;return `<button type="button" class="ide-file ${active?'active':''}" data-ide-file="${escapeHTML(entry.name)}"><span>${svg('file',15)}</span>${escapeHTML(entry.name)}</button>`}).join('');fileList.querySelectorAll('[data-ide-file]').forEach(button=>button.addEventListener('click',()=>switchFile(joinPath(projectRoot,button.dataset.ideFile))));};
-    const run=async()=>{const ext=extName(state.path);result.textContent='Wird ausgeführt …';try{if(ext==='html'||ext==='htm'){this.openBrowser(state.path,null,area.value);result.textContent='HTML-Vorschau im Browserfenster geöffnet (Sandbox).'}else if(ext==='py'){result.textContent=await this.termEngine.runPython(area.value)}else if(ext==='sql'){const data=this.db.run(area.value);result.textContent=data.message+(data.columns.length?'\n'+data.columns.join(' | ')+'\n'+data.rows.map(row=>data.columns.map(column=>row[column]).join(' | ')).join('\n'):'')}else if(['java','cs','php','cpp','c','js','mjs'].includes(ext)){const compiled=simulateCompiled(ext==='cs'?'cs':['java','cpp','c','php'].includes(ext)?ext:'js',area.value);result.textContent=(compiled.output||'')+'\n\n'+compiled.detail}else result.textContent='Für diesen Dateityp gibt es keinen Ausführungsmodus. Speichere die Datei oder öffne eine Lernsprache.'}catch(error){result.textContent='Fehler: '+error.message}};
-    w.content.querySelectorAll('[data-ide]').forEach(button=>button.addEventListener('click',async()=>{const action=button.dataset.ide;if(action==='save'){try{save()}catch(error){result.textContent='Fehler: '+error.message}}if(action==='run'){button.disabled=true;await run();button.disabled=false}if(action==='clear')result.textContent='';if(action==='terminal')this.openTerminal();if(action==='new'){const name=prompt('Dateiname (z. B. mein-programm.py):');if(!name)return;try{const path=joinPath(projectRoot,name);this.fs.write(path,'');switchFile(path);this.notifyFiles()}catch(error){this.toast(error.message)}}}));
-    area.value=this.fs.read(state.path);area.addEventListener('input',()=>{state.dirty=true;update()});area.addEventListener('scroll',syncScroll);area.addEventListener('keyup',update);area.addEventListener('click',update);area.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();try{save()}catch(error){result.textContent='Fehler: '+error.message}}if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();run()}if(event.key==='Tab'){event.preventDefault();area.setRangeText('  ',area.selectionStart,area.selectionEnd,'end');state.dirty=true;update()}});
-    refreshExplorer();update();setTimeout(()=>area.focus(),50);return w;
-  }
-  openGitGraph(){
-    const projectRoot=joinPath(homePath(this.currentOS),'Projects');const w=this.makeWindow('git','Git Graph · Projects','branch',{width:980,height:630});const state={selected:this.git.headId(),notice:'Lokale Git-Lernsimulation · keine echten Remotes oder Systemprozesse.'};
-    w.content.className='window-content git-content';
-    const render=()=>{
-      const status=this.git.status(),files=this.git.files(this.fs,projectRoot),graph=this.git.graph(),selected=graph.find(commit=>commit.id===state.selected)||status.head;
-      w.content.innerHTML=`<div class="git-toolbar"><div>${svg('branch',18)} <strong>Git Graph</strong><span>~/Projects</span></div><div><button type="button" data-git-action="terminal">Terminal</button><button type="button" data-git-action="refresh">↻ Aktualisieren</button></div></div><div class="git-layout"><aside class="git-sidebar"><section><div class="git-section-title">REPOSITORY</div><div class="git-branch-current">${svg('branch',16)} <strong>${escapeHTML(status.branch)}</strong></div><label class="git-label" for="git-branch-select">Branch wechseln</label><select id="git-branch-select" class="git-branch-select">${this.git.branchNames().map(branch=>`<option value="${escapeHTML(branch)}" ${branch===status.branch?'selected':''}>${escapeHTML(branch)}</option>`).join('')}</select><div class="git-new-branch"><input class="git-new-branch-input" aria-label="Neuen Branch anlegen" placeholder="feature/mein-branch"><button type="button" data-git-action="branch">+</button></div></section><section class="git-changes"><div class="git-section-title">STAGING AREA <span>${status.staged.length}</span></div><button type="button" class="git-stage-all" data-git-action="stage-all">+ Alle Dateien stagen</button><div class="git-file-list">${files.map(file=>`<button type="button" class="git-file ${status.staged.includes(file)?'staged':''}" data-git-file="${escapeHTML(file)}"><span>${status.staged.includes(file)?'✓':'+'}</span>${svg('file',14)} ${escapeHTML(file)}</button>`).join('')}</div></section><p class="git-simulation-note">Änderungen werden getrennt je simuliertem Betriebssystem im Browser gespeichert.</p></aside><main class="git-main"><section class="git-graph-panel"><header><div><span class="git-eyebrow">COMMIT-HISTORIE</span><h2>${escapeHTML(status.branch)}</h2></div><span class="git-head-label">HEAD → ${escapeHTML(status.branch)}</span></header><div class="git-graph-list">${graph.map((commit,index)=>`<button type="button" class="git-graph-row branch-${commit.branch.startsWith('feature/')?'feature':'main'} ${commit.id===state.selected?'selected':''}" data-git-commit="${commit.id}"><span class="git-graph-track"><i></i>${index<graph.length-1?'<b></b>':''}</span><span class="git-commit-summary"><strong>${escapeHTML(commit.message)}</strong><small><code>${commit.id}</code> · ${escapeHTML(commit.author.split(' ')[0])} · ${new Date(commit.time).toLocaleDateString('de-DE',{day:'2-digit',month:'short'})}</small></span><span class="git-refs">${commit.refs.map(ref=>`<em class="${ref===status.branch?'head':''}">${escapeHTML(ref)}</em>`).join('')}</span></button>`).join('')}</div></section><section class="git-commit-panel"><div class="git-detail"><span class="git-eyebrow">AUSGEWÄHLTER COMMIT</span><strong>${escapeHTML(selected?.message||'Kein Commit')}</strong><small><code>${escapeHTML(selected?.id||'')}</code> · ${escapeHTML(selected?.author||'')}</small><p>${selected?.files?.length?selected.files.map(file=>`<code>${escapeHTML(file)}</code>`).join(' '):'Keine Dateien'}</p></div><div class="git-commit-form"><label for="git-commit-message">Commit-Nachricht</label><textarea id="git-commit-message" placeholder="z. B. Begrüßung verbessern" ${status.staged.length?'':'disabled'}></textarea><button type="button" data-git-action="commit" ${status.staged.length?'':'disabled'}>${svg('save',15)} ${status.staged.length?`${status.staged.length} Datei(en) committen`:'Zuerst Dateien stagen'}</button></div></section><p class="git-flash" role="status">${escapeHTML(state.notice)}</p></main></div>`;
-      w.content.querySelectorAll('[data-git-file]').forEach(button=>button.addEventListener('click',()=>{const file=button.dataset.gitFile;try{if(this.git.status().staged.includes(file))this.git.unstage(file);else this.git.stage([file],this.fs,projectRoot);state.notice=`${file} ${this.git.status().staged.includes(file)?'zur Staging-Area hinzugefügt':'aus der Staging-Area entfernt'}.`;render()}catch(error){state.notice='Fehler: '+error.message;render()}}));
-      w.content.querySelectorAll('[data-git-commit]').forEach(button=>button.addEventListener('click',()=>{state.selected=button.dataset.gitCommit;render()}));
-      $('.git-branch-select',w.content).addEventListener('change',event=>{try{this.git.switchBranch(event.target.value);state.selected=this.git.headId();state.notice='Zu Branch '+event.target.value+' gewechselt.';render()}catch(error){state.notice='Fehler: '+error.message;render()}});
-      w.content.querySelectorAll('[data-git-action]').forEach(button=>button.addEventListener('click',()=>{const action=button.dataset.gitAction;try{if(action==='terminal')return this.openTerminal();if(action==='refresh'){state.notice='Ansicht aktualisiert.';return render()}if(action==='stage-all'){this.git.stage(['.'],this.fs,projectRoot);state.notice='Alle Projektdateien befinden sich in der Staging-Area.'}if(action==='branch'){const input=$('.git-new-branch-input',w.content),branch=this.git.createBranch(input.value);this.git.switchBranch(branch);state.selected=this.git.headId();state.notice='Branch '+branch+' angelegt und ausgecheckt.'}if(action==='commit'){const message=$('#git-commit-message',w.content).value,commit=this.git.commit(message);state.selected=commit.id;state.notice='Commit '+commit.id+' erstellt.'}render()}catch(error){state.notice='Fehler: '+error.message;render()}}));
-    };
-    render();return w;
-  }
-  startMatrix(){
-    if(this.matrixLayer)return;
-    const glyphs='01アイウエオカキクケコサシスセソ<>[]{}*+-/';const columns=Math.min(48,Math.max(16,Math.floor(this.desktop.clientWidth/27)));
-    const stream=()=>Array.from({length:18+Math.floor(Math.random()*18)},()=>glyphs[Math.floor(Math.random()*glyphs.length)]).join('\n');
-    const layer=document.createElement('section');layer.className='matrix-overlay';layer.setAttribute('role','dialog');layer.setAttribute('aria-label','Matrix-Bildschirmschoner');
-    layer.innerHTML=`<div class="matrix-streams">${Array.from({length:columns},(_,index)=>`<span class="matrix-stream" style="--left:${(index/(columns-1))*100}%;--delay:-${(Math.random()*7).toFixed(2)}s;--duration:${(5+Math.random()*5).toFixed(2)}s;--size:${10+Math.floor(Math.random()*6)}px">${stream()}</span>`).join('')}</div><div class="matrix-hud"><strong>DESKTOPSIM // MATRIX MODE</strong><button type="button" data-matrix-close>ESC · Beenden</button></div>`;
-    layer.querySelector('[data-matrix-close]').addEventListener('click',()=>this.stopMatrix());this.desktop.append(layer);this.matrixLayer=layer;layer.querySelector('[data-matrix-close]').focus();
-  }
-  stopMatrix(){if(!this.matrixLayer)return;this.matrixLayer.remove();this.matrixLayer=null;}
-  launchConfetti(){
-    this.stopConfetti();const colors=['#ffd166','#ff6b8f','#64d6ff','#82eab6','#b993ff','#ff9d4a'],layer=document.createElement('div');layer.className='confetti-layer';layer.setAttribute('aria-hidden','true');
-    layer.innerHTML=Array.from({length:96},(_,index)=>`<i class="confetti-piece" style="--left:${Math.random()*100}%;--drift:${Math.floor(Math.random()*180-90)}px;--delay:${(Math.random()*0.9).toFixed(2)}s;--duration:${(2.8+Math.random()*2).toFixed(2)}s;--turn:${Math.floor(Math.random()*720-360)}deg;--color:${colors[index%colors.length]}"></i>`).join('');this.desktop.append(layer);this.partyLayer=layer;this.partyTimer=setTimeout(()=>this.stopConfetti(),5600);
-  }
-  stopConfetti(){clearTimeout(this.partyTimer);this.partyTimer=null;if(this.partyLayer){this.partyLayer.remove();this.partyLayer=null;}}
-  toggleByte(){
-    if(this.bytePet){this.dismissByte();this.toast('Byte macht eine Pause.');return false}
-    const pet=document.createElement('button');pet.type='button';pet.className='byte-pet';pet.setAttribute('aria-label','Byte, der Desktop-Begleiter');pet.innerHTML='<span class="byte-bubble"></span><span class="byte-ears"></span><span class="byte-face"><i></i><i></i><b></b></span><small>BYTE</small>';
-    const phrases=['Hallo! Ich bin Byte.', 'Dein Code sieht gut aus.', 'Schon Ctrl+S gedrückt?', 'git status ist immer eine gute Idee.', 'Psst … Konami funktioniert auch hier.'];
-    pet.addEventListener('click',()=>{const bubble=$('.byte-bubble',pet);bubble.textContent=phrases[Math.floor(Math.random()*phrases.length)];bubble.classList.add('visible');clearTimeout(this.byteTimer);this.byteTimer=setTimeout(()=>bubble.classList.remove('visible'),3200)});
-    this.desktop.append(pet);this.bytePet=pet;setTimeout(()=>pet.click(),120);this.toast('Byte ist auf dem Desktop gelandet. Klicke ihn an!');return true;
-  }
-  dismissByte(){clearTimeout(this.byteTimer);if(this.bytePet){this.bytePet.remove();this.bytePet=null;}}
-  openFunLab(){
-    const w=this.makeWindow('fun','Fun Lab · DesktopSim','sparkle',{width:760,height:500});w.content.className='window-content fun-content';
-    w.content.innerHTML=`<div class="fun-hero"><div>${svg('sparkle',38)}</div><span class="eyebrow">DESKTOPSIM / SPIELEREIEN</span><h2>Mach den Desktop ein bisschen magisch.</h2><p>Alle Effekte laufen nur im Browser, lassen sich jederzeit beenden und verändern keine Dateien.</p></div><div class="fun-cards"><article class="fun-card matrix-card"><span class="fun-card-icon">01</span><h3>Matrix-Modus</h3><p>Ein animierter Code-Regen als Vollbild-Bildschirmschoner. Mit <kbd>Esc</kbd> schließen.</p><button type="button" data-fun="matrix">Matrix starten</button></article><article class="fun-card party-card"><span class="fun-card-icon">02</span><h3>Konfetti</h3><p>Eine kleine Erfolgsexplosion für gelöste Aufgaben und fertige Commits.</p><button type="button" data-fun="party">Party starten</button></article><article class="fun-card byte-card"><span class="fun-card-icon">03</span><h3>Byte</h3><p>Ein kleiner Desktop-Begleiter mit Tipps. Klick ihn auf dem Desktop an.</p><button type="button" data-fun="byte">${this.bytePet?'Byte wegschicken':'Byte herholen'}</button></article></div><div class="fun-foot">Easter Egg: ↑ ↑ ↓ ↓ ← → ← → B A</div>`;
-    w.content.querySelectorAll('[data-fun]').forEach(button=>button.addEventListener('click',()=>{if(button.dataset.fun==='matrix')this.startMatrix();if(button.dataset.fun==='party')this.launchConfetti();if(button.dataset.fun==='byte'){this.toggleByte();button.textContent=this.bytePet?'Byte wegschicken':'Byte herholen'}}));return w;
-  }
-  openGame(){
-    if(this.currentOS==='winxp')return this.openSolitaire();
-    if(isWindows(this.currentOS))return this.openMinesweeper();
-    if(this.currentOS==='macos')return this.openMacGame();
-    return this.openSnake();
-  }
-  openSolitaire(){
-    const w=this.makeWindow('game','Solitaire · Windows XP','game',{width:820,height:570});
-    const suits=['♠','♥','♦','♣'],names={1:'A',11:'J',12:'Q',13:'K'};
-    const label=card=>`${names[card.rank]||card.rank}${card.suit}`;
-    const color=card=>(card.suit==='♥'||card.suit==='♦')?'red':'black';
-    const state={stock:[],waste:[],foundations:suits.map(()=>[]),tableau:[],selected:null,message:'Lege abwechselnd rote und schwarze Karten ab.'};
-    const fresh=()=>{
-      let deck=suits.flatMap(suit=>Array.from({length:13},(_,i)=>({suit,rank:i+1,up:false})));for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]]}
-      state.tableau=[];let cursor=0;for(let col=0;col<7;col++){state.tableau.push(deck.slice(cursor,cursor+col+1).map((card,i)=>({...card,up:i===col})));cursor+=col+1}state.stock=deck.slice(cursor);state.waste=[];state.foundations=suits.map(()=>[]);state.selected=null;state.message='Neue Runde: Beginne mit den sichtbaren Karten.';
-    };
-    const sourceCards=()=>{if(!state.selected)return[];const s=state.selected;if(s.area==='waste')return state.waste.length?[state.waste.at(-1)]:[];return state.tableau[s.col].slice(s.index)};
-    const clearSource=()=>{const s=state.selected;if(s.area==='waste')state.waste.pop();else{state.tableau[s.col].splice(s.index);const top=state.tableau[s.col].at(-1);if(top&&!top.up)top.up=true;}state.selected=null;};
-    const selectTableau=(col,index)=>{const card=state.tableau[col][index];if(!card.up){if(index===state.tableau[col].length-1){card.up=true;state.message='Karte aufgedeckt.'}return;}if(state.selected){if(state.selected.area==='tableau'&&state.selected.col===col&&state.selected.index===index){state.selected=null;state.message='Auswahl aufgehoben.'}else moveTableau(col);return;}state.selected={area:'tableau',col,index};state.message=`${label(card)} ausgewählt.`;};
-    const moveTableau=col=>{const moving=sourceCards(),target=state.tableau[col].at(-1);if(!moving.length)return;if(state.selected.area==='tableau'&&state.selected.col===col)return;if((target&&(!target.up||color(target)===color(moving[0])||target.rank!==moving[0].rank+1))||(!target&&moving[0].rank!==13)){state.message='Dort passen nur abwechselnde Farben in absteigender Reihenfolge – auf leer nur ein König.';return;}clearSource();state.tableau[col].push(...moving);state.message='Karten verschoben.';render();};
-    const moveFoundation=index=>{const moving=sourceCards(),target=state.foundations[index];if(moving.length!==1)return;if(moving[0].suit!==suits[index]||moving[0].rank!==target.length+1){state.message='Im Fundament wird jede Farbe von Ass bis König aufgebaut.';render();return;}const card=moving[0];clearSource();target.push(card);state.message=`${label(card)} liegt im Fundament.`;if(state.foundations.every(stack=>stack.length===13))state.message='Gewonnen! Alle Karten sind sortiert.';render();};
-    const draw=()=>{if(!state.stock.length){if(!state.waste.length){state.message='Keine Karten mehr im Stapel.';render();return;}state.stock=state.waste.reverse().map(card=>({...card,up:false}));state.waste=[];state.message='Ablagestapel zurückgedreht.';render();return;}const card=state.stock.pop();card.up=true;state.waste.push(card);state.selected=null;state.message=`${label(card)} liegt auf dem Ablagestapel.`;render();};
-    w.content.className='window-content game-content solitaire-game';
-    const render=()=>{
-      const cardButton=(card,attrs='')=>`<button type="button" class="sol-card ${card.up?'':'sol-down'} ${card.up?color(card):''}" ${attrs}>${card.up?label(card):'✦'}</button>`;
-      w.content.innerHTML=`<div class="game-bar xp-game-bar"><div><strong>Solitaire</strong><span>Windows XP · Klondike</span></div><button data-game-new>Neue Runde</button></div><div class="solitaire-board"><div class="sol-top"><button class="sol-stock ${state.stock.length?'':'empty'}" data-sol-stock aria-label="Karte vom Stapel ziehen">${state.stock.length?'✦':'↻'}</button><div class="sol-waste">${state.waste.length?cardButton(state.waste.at(-1),'data-sol-waste'):'<span> </span>'}</div><div class="sol-spacer"></div>${suits.map((suit,index)=>`<button class="sol-foundation" data-sol-foundation="${index}" aria-label="Fundament ${suit}">${state.foundations[index].length?label(state.foundations[index].at(-1)):suit}</button>`).join('')}</div><div class="sol-tableau">${state.tableau.map((stack,col)=>`<div class="sol-column" style="height:${Math.max(176,stack.length*28+62)}px">${stack.map((card,index)=>cardButton(card,`data-sol-card="${col}:${index}" style="top:${index*27}px"`)).join('')}<button class="sol-target" data-sol-target="${col}" style="top:${stack.length*27+4}px" aria-label="Karten auf Stapel ${col+1} legen"></button></div>`).join('')}</div></div><div class="game-message">${escapeHTML(state.message)}</div>`;
-      $('[data-game-new]',w.content).addEventListener('click',()=>{fresh();render()});$('[data-sol-stock]',w.content).addEventListener('click',draw);w.content.querySelectorAll('[data-sol-waste]').forEach(button=>button.addEventListener('click',()=>{state.selected=state.selected?null:{area:'waste'};state.message=state.selected?'Ablagekarte ausgewählt.':'Auswahl aufgehoben.';render()}));w.content.querySelectorAll('[data-sol-card]').forEach(button=>button.addEventListener('click',()=>{const [col,index]=button.dataset.solCard.split(':').map(Number);selectTableau(col,index);render()}));w.content.querySelectorAll('[data-sol-target]').forEach(button=>button.addEventListener('click',()=>moveTableau(+button.dataset.solTarget)));w.content.querySelectorAll('[data-sol-foundation]').forEach(button=>button.addEventListener('click',()=>moveFoundation(+button.dataset.solFoundation)));
-    };
-    fresh();render();return w;
-  }
-  openMinesweeper(){
-    const w=this.makeWindow('game',`Minesweeper · ${this.os.label}`,'game',{width:590,height:620});const size=9,mines=10;
-    const state={cells:[],started:false,over:false,flags:0,message:'Klicke ein Feld. Mit rechter Maustaste markierst du eine Mine.'};
-    const reset=()=>{state.cells=Array.from({length:size*size},()=>({mine:false,revealed:false,flag:false,count:0}));state.started=false;state.over=false;state.flags=0;state.message='Klicke ein Feld. Mit rechter Maustaste markierst du eine Mine.'};
-    const neighbors=index=>{const x=index%size,y=Math.floor(index/size),out=[];for(let yy=Math.max(0,y-1);yy<=Math.min(size-1,y+1);yy++)for(let xx=Math.max(0,x-1);xx<=Math.min(size-1,x+1);xx++)if(xx!==x||yy!==y)out.push(yy*size+xx);return out;};
-    const plant=first=>{const safe=new Set([first,...neighbors(first)]);let planted=0;while(planted<mines){const index=Math.floor(Math.random()*state.cells.length);if(safe.has(index)||state.cells[index].mine)continue;state.cells[index].mine=true;planted++;}state.cells.forEach((cell,index)=>cell.count=neighbors(index).filter(n=>state.cells[n].mine).length);state.started=true;};
-    const finish=won=>{state.over=true;state.cells.forEach(cell=>{if(cell.mine)cell.revealed=true});state.message=won?'Gewonnen! Alle sicheren Felder sind aufgedeckt.':'Boom! Starte eine neue Runde.';};
-    const reveal=index=>{const cell=state.cells[index];if(state.over||cell.flag||cell.revealed)return;if(!state.started)plant(index);const queue=[index];while(queue.length){const current=queue.pop(),item=state.cells[current];if(item.revealed||item.flag)continue;item.revealed=true;if(!item.mine&&item.count===0)neighbors(current).forEach(n=>{if(!state.cells[n].revealed&&!state.cells[n].mine)queue.push(n)});}if(cell.mine)finish(false);else if(state.cells.filter(cell=>!cell.mine).every(cell=>cell.revealed))finish(true);render();};
-    const flag=index=>{const cell=state.cells[index];if(state.over||cell.revealed)return;cell.flag=!cell.flag;state.flags+=cell.flag?1:-1;render();};
-    w.content.className='window-content game-content mines-game';
-    const render=()=>{w.content.innerHTML=`<div class="game-bar mine-game-bar"><div><strong>Minesweeper</strong><span>${escapeHTML(this.os.label)} · 9 × 9</span></div><div class="mine-counter">💣 ${mines-state.flags}</div><button data-game-new>Neue Runde</button></div><div class="mine-board" role="grid">${state.cells.map((cell,index)=>`<button class="mine-cell ${cell.revealed?'revealed':''} ${cell.mine&&cell.revealed?'mine-hit':''}" data-mine-cell="${index}" aria-label="Feld ${index+1}">${cell.revealed?(cell.mine?'✹':cell.count||''):(cell.flag?'⚑':'')}</button>`).join('')}</div><div class="game-message">${escapeHTML(state.message)}</div>`;$('[data-game-new]',w.content).addEventListener('click',()=>{reset();render()});w.content.querySelectorAll('[data-mine-cell]').forEach(button=>{button.addEventListener('click',()=>reveal(+button.dataset.mineCell));button.addEventListener('contextmenu',event=>{event.preventDefault();flag(+button.dataset.mineCell)})});};
-    reset();render();return w;
-  }
-  openSnake(){
-    const w=this.makeWindow('game',`Tux-Snake · ${this.os.label}`,'game',{width:560,height:640}),size=14;
-    const state={snake:[size*7+6,size*7+5,size*7+4],food:size*4+4,direction:'right',next:'right',score:0,over:false,message:'Pfeiltasten oder Steuertasten nutzen.'};
-    const placeFood=()=>{const free=Array.from({length:size*size},(_,i)=>i).filter(i=>!state.snake.includes(i));state.food=free[Math.floor(Math.random()*free.length)]};
-    const opposite={left:'right',right:'left',up:'down',down:'up'};
-    const step=()=>{if(state.over||!this.windows.has(w.id))return;state.direction=state.next;const head=state.snake[0],x=head%size,y=Math.floor(head/size),next=state.direction==='left'?head-1:state.direction==='right'?head+1:state.direction==='up'?head-size:head+size;if((state.direction==='left'&&x===0)||(state.direction==='right'&&x===size-1)||next<0||next>=size||state.snake.includes(next)){state.over=true;state.message='Game over – starte neu.';render();return;}state.snake.unshift(next);if(next===state.food){state.score++;placeFood();state.message='Lecker! +1 Punkt.'}else state.snake.pop();render();};
-    const setDirection=direction=>{if(opposite[direction]!==state.direction)state.next=direction;};
-    const restart=()=>{state.snake=[size*7+6,size*7+5,size*7+4];state.food=size*4+4;state.direction='right';state.next='right';state.score=0;state.over=false;state.message='Neue Runde.';render()};
-    w.content.className='window-content game-content snake-game';w.element.tabIndex=0;
-    const render=()=>{w.content.innerHTML=`<div class="game-bar tux-game-bar"><div><strong>Tux-Snake</strong><span>Terminal-Klassiker · ${escapeHTML(this.os.label)}</span></div><strong>Punkte: ${state.score}</strong><button data-game-new>Neu</button></div><div class="snake-board">${Array.from({length:size*size},(_,index)=>`<span class="snake-cell ${state.snake.includes(index)?(index===state.snake[0]?'snake-head':'snake-body'):index===state.food?'snake-food':''}"></span>`).join('')}</div><div class="snake-controls"><button data-snake="up">↑</button><button data-snake="left">←</button><button data-snake="down">↓</button><button data-snake="right">→</button></div><div class="game-message">${escapeHTML(state.message)}</div>`;$('[data-game-new]',w.content).addEventListener('click',restart);w.content.querySelectorAll('[data-snake]').forEach(button=>button.addEventListener('click',()=>setDirection(button.dataset.snake)));};
-    w.element.addEventListener('keydown',event=>{const keys={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};if(keys[event.key]){event.preventDefault();setDirection(keys[event.key])}});w.cleanup=()=>clearInterval(state.timer);state.timer=setInterval(step,240);render();setTimeout(()=>w.element.focus(),0);return w;
-  }
-  openMacGame(){
-    const w=this.makeWindow('game','Drei gewinnt · macOS','game',{width:510,height:555}),state={cells:Array(9).fill(''),over:false,message:'Du spielst X. Der Mac spielt O.'};
-    const wins=[['0','1','2'],['3','4','5'],['6','7','8'],['0','3','6'],['1','4','7'],['2','5','8'],['0','4','8'],['2','4','6']];
-    const winner=()=>wins.find(line=>line.every(index=>state.cells[index]&&state.cells[index]===state.cells[line[0]]))?state.cells[wins.find(line=>line.every(index=>state.cells[index]&&state.cells[index]===state.cells[line[0]]))[0]]:'';
-    const render=()=>{w.content.innerHTML=`<div class="game-bar mac-game-bar"><div><strong>Drei gewinnt</strong><span>macOS Spielbrett</span></div><button data-game-new>Neue Runde</button></div><div class="mac-grid">${state.cells.map((value,index)=>`<button data-mac-cell="${index}" ${value||state.over?'disabled':''}>${value}</button>`).join('')}</div><div class="game-message">${escapeHTML(state.message)}</div>`;$('[data-game-new]',w.content).addEventListener('click',()=>{state.cells=Array(9).fill('');state.over=false;state.message='Du spielst X. Der Mac spielt O.';render()});w.content.querySelectorAll('[data-mac-cell]').forEach(button=>button.addEventListener('click',()=>{const index=+button.dataset.macCell;if(state.over||state.cells[index])return;state.cells[index]='X';let result=winner();if(result){state.over=true;state.message='Du gewinnst!';render();return;}const free=state.cells.map((value,i)=>value?null:i).filter(i=>i!==null);if(!free.length){state.over=true;state.message='Unentschieden.';render();return;}state.cells[free[Math.floor(Math.random()*free.length)]]='O';result=winner();if(result){state.over=true;state.message='Der Mac gewinnt diese Runde.'}else if(state.cells.every(Boolean)){state.over=true;state.message='Unentschieden.'}render()}));};
-    render();return w;
-  }
-  openSimpleStructogram(){
-    const w=this.makeWindow('structogram','Struktogramm · Diagrammwerkstatt','structure',{width:1080,height:710});
-    const state={language:'python',nodes:[{type:'statement',text:'summe = 0'},{type:'for',condition:'i in range(1, 6)',text:'summe = summe + i'},{type:'if',condition:'summe > 10',text:'print(summe)',elseText:'print("noch klein")'}]};
-    const cleanStatement=(text,lang)=>{const value=(text||'').trim();return lang==='javascript'&&value&&!/[;{}]$/.test(value)?value+';':value|| (lang==='python'?'pass':';')};
-    const indented=(text,lang)=>String(cleanStatement(text,lang)).split('\n').map(line=>'  '+line).join('\n');
-    const codeFromNodes=()=>state.nodes.map(node=>{
-      if(node.type==='statement')return cleanStatement(node.text,state.language);
-      if(node.type==='if')return state.language==='python'?`if ${node.condition||'Bedingung'}:\n${indented(node.text,state.language)}\nelse:\n${indented(node.elseText,state.language)}`:`if (${node.condition||'condition'}) {\n${indented(node.text,state.language)}\n} else {\n${indented(node.elseText,state.language)}\n}`;
-      if(node.type==='for')return state.language==='python'?`for ${node.condition||'element in werte'}:\n${indented(node.text,state.language)}`:`for (${node.condition||'let i = 0; i < 5; i++'}) {\n${indented(node.text,state.language)}\n}`;
-      return state.language==='python'?`while ${node.condition||'Bedingung'}:\n${indented(node.text,state.language)}`:`while (${node.condition||'condition'}) {\n${indented(node.text,state.language)}\n}`;
-    }).join('\n\n');
-    const nodeFromHeader=(line,language)=>{
-      const trimmed=line.trim().replace(/[{:;]\s*$/,'').trim();
-      let match=language==='python'?trimmed.match(/^if\s+(.+)$/):trimmed.match(/^if\s*\((.*)\)$/);
-      if(match)return {type:'if',condition:match[1],text:'',elseText:''};
-      match=language==='python'?trimmed.match(/^for\s+(.+)$/):trimmed.match(/^for\s*\((.*)\)$/);
-      if(match)return {type:'for',condition:match[1],text:''};
-      match=language==='python'?trimmed.match(/^while\s+(.+)$/):trimmed.match(/^while\s*\((.*)\)$/);
-      if(match)return {type:'while',condition:match[1],text:''};
-      return {type:'statement',text:trimmed};
-    };
-    const parseCode=code=>{
-      const lines=String(code).replace(/\r/g,'').split('\n').filter(line=>line.trim()&&line.trim()!=='{'&&line.trim()!=='}'&&!line.trim().startsWith(state.language==='python'?'#':'//'));
-      const nodes=[];
-      for(let i=0;i<lines.length;i++){
-        const node=nodeFromHeader(lines[i],state.language);
-        if(node.type==='statement'){nodes.push(node);continue}
-        let next=lines[i+1]?.trim()||'';
-        if(next==='{'||next==='')next=lines[++i]?.trim()||'';
-        node.text=next.replace(/[;}]+$/,'').trim()||'';
-        if(next)i++;
-        let elseLine=lines[i+1]?.trim()||'';
-        if(/^}?\s*else/.test(elseLine)||elseLine==='else:'){i++;let alternate=lines[i+1]?.trim()||'';if(alternate==='{'||alternate==='')alternate=lines[++i]?.trim()||'';node.elseText=alternate.replace(/[;}]+$/,'').trim();if(alternate)i++;}
-        nodes.push(node);
-      }
-      state.nodes=nodes.length?nodes:[{type:'statement',text:''}];
-    };
-    w.content.className='window-content structogram-content';
-    w.content.innerHTML=`<div class="struct-toolbar"><div><strong>Struktogramm-Werkstatt</strong><span>Erstelle Abläufe oder wandle einfachen Code um.</span></div><label>Sprache <select data-struct-language><option value="python">Python</option><option value="javascript">JavaScript</option></select></label><button data-struct-action="parse">Struktogramm erstellen</button><button class="accent-action" data-struct-action="generate">Code erzeugen</button><button data-struct-action="editor">Im Editor öffnen</button></div><div class="struct-workspace"><section class="struct-code-pane"><div class="struct-pane-head"><strong>QUELLCODE</strong><button data-struct-action="example">Beispiel</button></div><textarea class="struct-code" aria-label="Code für Struktogramm">${escapeHTML(codeFromNodes())}</textarea><p>Unterstützt einfache Anweisungen, <code>if</code>, <code>for</code> und <code>while</code>. Verschachtelungen bleiben bewusst übersichtlich.</p></section><section class="struct-diagram-pane"><div class="struct-pane-head"><strong>STRUKTOGRAMM</strong><span>Bearbeite die Blöcke direkt.</span></div><div class="struct-add"><button data-struct-add="statement">+ Anweisung</button><button data-struct-add="if">+ Wenn</button><button data-struct-add="while">+ Solange</button><button data-struct-add="for">+ Für</button></div><div class="struct-diagram" aria-label="Bearbeitbares Struktogramm"></div></section></div>`;
-    const codeArea=$('.struct-code',w.content),diagram=$('.struct-diagram',w.content),language=$('[data-struct-language]',w.content);
-    const labels={statement:'Anweisung',if:'Bedingung',while:'Wiederholung',for:'Zählschleife'};
-    const render=()=>{
-      diagram.innerHTML=state.nodes.map((node,index)=>`<article class="struct-node struct-${node.type}"><header><strong>${labels[node.type]}</strong><button data-struct-remove="${index}" title="Block entfernen">×</button></header>${node.type==='statement'?`<input data-struct-field="text" data-struct-index="${index}" value="${escapeHTML(node.text)}" aria-label="Anweisung">`:node.type==='if'?`<input data-struct-field="condition" data-struct-index="${index}" value="${escapeHTML(node.condition)}" aria-label="Bedingung"><div class="struct-branches"><label>Ja<input data-struct-field="text" data-struct-index="${index}" value="${escapeHTML(node.text)}" aria-label="Dann-Anweisung"></label><label>Nein<input data-struct-field="elseText" data-struct-index="${index}" value="${escapeHTML(node.elseText)}" aria-label="Sonst-Anweisung"></label></div>`:`<input data-struct-field="condition" data-struct-index="${index}" value="${escapeHTML(node.condition)}" aria-label="Schleifenbedingung"><label class="struct-body">Wiederhole<input data-struct-field="text" data-struct-index="${index}" value="${escapeHTML(node.text)}" aria-label="Schleifeninhalt"></label>`}</article>`).join('');
-      diagram.querySelectorAll('[data-struct-field]').forEach(input=>input.addEventListener('change',()=>{state.nodes[+input.dataset.structIndex][input.dataset.structField]=input.value;}));
-      diagram.querySelectorAll('[data-struct-remove]').forEach(button=>button.addEventListener('click',()=>{state.nodes.splice(+button.dataset.structRemove,1);render()}));
-    };
-    w.content.querySelectorAll('[data-struct-add]').forEach(button=>button.addEventListener('click',()=>{const type=button.dataset.structAdd;state.nodes.push(type==='statement'?{type,text:'neue Anweisung'}:type==='if'?{type,condition:'Bedingung',text:'dann',elseText:'sonst'}:type==='for'?{type,condition:state.language==='python'?'element in werte':'let i = 0; i < 5; i++',text:'Anweisung'}:{type,condition:'Bedingung',text:'Anweisung'});render()}));
-    language.addEventListener('change',()=>{state.language=language.value;codeArea.value=codeFromNodes();render()});
-    w.content.querySelectorAll('[data-struct-action]').forEach(button=>button.addEventListener('click',()=>{const action=button.dataset.structAction;if(action==='generate'){codeArea.value=codeFromNodes();this.toast('Code aus dem Struktogramm erzeugt')}if(action==='parse'){parseCode(codeArea.value);render();this.toast('Struktogramm aus dem Code erstellt')}if(action==='example'){state.nodes=[{type:'statement',text:state.language==='python'?'zahl = 4':'let zahl = 4;'},{type:'if',condition:'zahl % 2 === 0',text:state.language==='python'?'print("gerade")':'console.log("gerade");',elseText:state.language==='python'?'print("ungerade")':'console.log("ungerade");'}];codeArea.value=codeFromNodes();render()}if(action==='editor'){const ext=state.language==='python'?'py':'js',file=`struktogramm.${ext}`;this.fs.write(file,codeFromNodes(),joinPath(homePath(this.currentOS),'Projects'));this.openEditor(file,joinPath(homePath(this.currentOS),'Projects'));this.toast('Code im Editor geöffnet')}}));
-    render();return w;
-  }
-  openStructogram(){
-    const w=this.makeWindow('structogram','Struktogramm · Diagrammwerkstatt','structure',{width:1080,height:710});
-    const exampleFor=language=>language==='python'?`class Rechnung:
-    def __init__(self, werte):
-        self.werte = werte
+  toggleFullscreen(){const el=document.documentElement;if(document.fullscreenElement)document.exitFullscreen?.();else el.requestFullscreen?.().catch(()=>document.body.classList.toggle('kiosk'))}
+  tick(){this.chrome.tickClock()}
 
-    def summe_positive(self):
-        summe = 0
-        for wert in self.werte:
-            if wert > 0:
-                summe = summe + wert
-            elif wert == 0:
-                print("neutral")
-            else:
-                print("übersprungen")
-        return summe
-
-class PremiumRechnung(Rechnung):
-    def anzeigen(self):
-        if self.summe_positive() > 10:
-            print("Premium")
-        else:
-            print("Standard")`:`class Rechnung {
-  constructor(werte) {
-    this.werte = werte;
-  }
-
-  summePositive() {
-    let summe = 0;
-    for (const wert of this.werte) {
-      if (wert > 0) {
-        summe = summe + wert;
-      } else if (wert === 0) {
-        console.log("neutral");
-      } else {
-        console.log("übersprungen");
-      }
-    }
-    return summe;
-  }
-}
-
-class PremiumRechnung extends Rechnung {
-  anzeigen() {
-    if (this.summePositive() > 10) {
-      console.log("Premium");
+  // ---------- Apps starten ----------
+  launch(id,opts={}){
+    this.chrome.closeMenus();
+    switch(id){
+      case'terminal':return this.openTerminal(opts.shell);case'files':return this.openFiles(opts.path);case'computer':return this.openFiles(isWindows(this.currentOS)?'/':'/');
+      case'docs':return this.openFiles(joinPath(homePath(this.currentOS),'Documents'));case'home':return this.openFiles(homePath(this.currentOS));case'trash':return this.openFiles(trashPath(this.currentOS));
+      case'editor':return this.openEditor(opts.path||'',opts.cwd);case'ide':return this.openIDE(opts.path||'',opts.cwd);case'browser':return this.openBrowser(opts.url);
+      case'settings':return this.openSettings(opts.page);case'taskmgr':return this.openTaskManager();case'calc':return this.openCalculator();case'about':return this.openAbout();
+      case'git':return this.openGitGraph();case'structogram':return this.openStructogram();case'game':return this.openGame();case'fun':return this.openFunLab();case'sql':return this.openSQL();case'guide':return this.openGuide();
+      case'run':return this.openRunDialog();
+      case'import':return $('#import-input').click();case'export':return this.exportFiles();
+      case'reset':return this.resetData();
+      case'lock':return this.power('lock');case'logout':return this.power('logout');case'shutdown':return this.power('shutdown');case'restart':return this.power('restart');case'sleep':return this.power('sleep');
     }
   }
-}`;
-    const state={language:'python',view:'struct',nodes:parseStructuredCode(exampleFor('python'),'python')};
-    const nodeField=(node,field,label)=>`<label class="struct-field">${label?`<span>${escapeHTML(label)}</span>`:''}<input data-struct-node="${node.id}" data-struct-field="${field}" value="${escapeHTML(node[field]??'')}"></label>`;
-    const childrenHTML=nodes=>nodes.length?nodes.map(nodeHTML).join(''):'<div class="struct-empty">leer</div>';
-    const branchHTML=branch=>`<section class="struct-branch"><strong>${escapeHTML(branch.label)}</strong><div class="struct-nested">${childrenHTML(branch.children)}</div></section>`;
-    const nodeHTML=node=>{
-      const remove=`<button data-struct-remove="${node.id}" title="Block entfernen" aria-label="Block entfernen">×</button>`;
-      if(node.type==='statement')return `<article class="struct-node struct-statement"><header><strong>Anweisung</strong>${remove}</header>${nodeField(node,'text','')}</article>`;
-      if(node.type==='if')return `<article class="struct-node struct-if"><header><strong>Verzweigung</strong>${remove}</header>${nodeField(node,'condition','Bedingung')}<div class="struct-branches">${node.branches.map(branchHTML).join('')}</div></article>`;
-      if(node.type==='loop')return `<article class="struct-node struct-loop"><header><strong>${node.loopKind==='for'?'Zählschleife':'Wiederholung'}</strong>${remove}</header>${nodeField(node,'condition',node.loopKind==='for'?'Schleifenkopf':'Bedingung')}<div class="struct-nested">${childrenHTML(node.children)}</div></article>`;
-      if(node.type==='class')return `<article class="struct-node struct-class"><header><strong>Klasse</strong>${remove}</header><div class="struct-scope-fields">${nodeField(node,'name','Name')}${nodeField({...node,bases:(node.bases||[]).join(', ')},'bases','Erbt von')}</div><div class="struct-nested">${childrenHTML(node.children)}</div></article>`;
-      if(node.type==='function')return `<article class="struct-node struct-function"><header><strong>Funktion / Methode</strong>${remove}</header><div class="struct-scope-fields">${nodeField(node,'name','Name')}${nodeField(node,'params','Parameter')}</div><div class="struct-nested">${childrenHTML(node.children)}</div></article>`;
-      if(node.type==='switch')return `<article class="struct-node struct-switch"><header><strong>Auswahl</strong>${remove}</header>${nodeField(node,'condition','Ausdruck')}<div class="struct-branches">${node.branches.map(branchHTML).join('')||'<div class="struct-empty">keine Fälle</div>'}</div></article>`;
-      return `<article class="struct-node struct-try"><header><strong>Fehlerbehandlung</strong>${remove}</header><div class="struct-branches">${node.branches.map(branchHTML).join('')}</div></article>`;
-    };
-    const flowNodes=nodes=>nodes.map(node=>{
-      if(node.type==='if'||node.type==='switch'||node.type==='try')return `<section class="flow-group"><div class="flow-step flow-decision">${escapeHTML(structLabel(node))}</div><div class="flow-branches">${(node.branches||[]).map(branch=>`<div class="flow-branch"><span>${escapeHTML(branch.label)}</span>${flowNodes(branch.children)||'<div class="flow-step flow-empty">weiter</div>'}</div>`).join('')}</div><div class="flow-join">◆ zusammenführen</div></section>`;
-      if(node.type==='loop')return `<section class="flow-group flow-loop"><div class="flow-step flow-decision">${escapeHTML(structLabel(node))}</div><div class="flow-loop-body">${flowNodes(node.children)||'<div class="flow-step flow-empty">leer</div>'}</div><div class="flow-loop-back">↺ zurück zur Bedingung</div></section>`;
-      if(node.type==='class'||node.type==='function'||node.type==='block')return `<section class="flow-scope"><div class="flow-step flow-scope-head">${escapeHTML(structLabel(node))}</div>${flowNodes(node.children)||'<div class="flow-step flow-empty">leer</div>'}</section>`;
-      return `<div class="flow-step flow-process">${escapeHTML(structLabel(node))}</div>`;
-    }).join('');
-    const flowHTML=()=>`<div class="flowchart" aria-label="Flussdiagramm"><div class="flow-step flow-terminal">Start</div>${flowNodes(state.nodes)||'<div class="flow-step flow-empty">Kein Code</div>'}<div class="flow-step flow-terminal">Ende</div></div>`;
-    const umlHTML=()=>{
-      const classes=structClasses(state.nodes);if(!classes.length)return '<div class="diagram-empty"><strong>Noch keine Klasse erkannt.</strong><span>Füge eine Klasse ein oder verwende das Beispiel, um ein UML-Klassendiagramm zu erhalten.</span></div>';
-      return `<div class="uml-canvas" aria-label="UML-Klassendiagramm">${classes.map(node=>{const fields=structClassFields(node),methods=(node.children||[]).filter(child=>child.type==='function'),dependencies=structDependencies(node,classes),relations=[...(node.bases||[]).map(base=>`△ erbt von ${base}`),...dependencies.filter(name=>!(node.bases||[]).includes(name)).map(name=>`⋯ nutzt ${name}`)];return `<article class="uml-class"><header>«class»<strong>${escapeHTML(node.name||'NeueKlasse')}</strong></header><section><strong>Attribute</strong>${fields.length?`<ul>${fields.map(field=>`<li>− ${escapeHTML(field)}</li>`).join('')}</ul>`:'<small>keine erkannt</small>'}</section><section><strong>Operationen</strong>${methods.length?`<ul>${methods.map(method=>`<li>+ ${escapeHTML(method.name)}(${escapeHTML(method.params||'')})</li>`).join('')}</ul>`:'<small>keine erkannt</small>'}</section>${relations.length?`<footer>${relations.map(relation=>`<span>${escapeHTML(relation)}</span>`).join('')}</footer>`:''}</article>`}).join('')}</div>`;
-    };
-    const addNode=type=>{
-      if(type==='statement')return structNode('statement',{text:state.language==='python'?'neue_anweisung()':'neueAnweisung()'});
-      if(type==='if')return structNode('if',{condition:'Bedingung',branches:[structBranch('Ja','Bedingung'),structBranch('Nein')]});
-      if(type==='loop')return structNode('loop',{loopKind:'while',condition:'Bedingung'});
-      if(type==='function')return structNode('function',{name:'neue_funktion',params:''});
-      return structNode('class',{name:'NeueKlasse',bases:[]});
-    };
-    w.content.className='window-content structogram-content';
-    w.content.innerHTML=`<div class="struct-toolbar"><div><strong>Struktogramm- & Diagrammwerkstatt</strong><span>Analysiert verschachtelte Blöcke, Klassen und Methoden lokal im Browser.</span></div><label>Sprache <select data-struct-language>${Object.entries(STRUCT_LANGUAGES).map(([id,info])=>`<option value="${id}">${info.label}</option>`).join('')}</select></label><button data-struct-action="parse">Code analysieren</button><button class="accent-action" data-struct-action="generate">Code erzeugen</button><button data-struct-action="editor">Im Editor öffnen</button></div><div class="struct-workspace"><section class="struct-code-pane"><div class="struct-pane-head"><strong>QUELLCODE</strong><button data-struct-action="example">Verschachteltes Beispiel</button></div><textarea class="struct-code" aria-label="Code für Diagramme">${escapeHTML(exampleFor('python'))}</textarea><p>Python sowie JavaScript, Java, C# und C++: Klassen, Methoden, verschachtelte <code>if</code>/<code>else</code>-Zweige und Schleifen werden als Baum gelesen. Der Parser ist absichtlich lokal und kein vollständiger Compiler.</p></section><section class="struct-diagram-pane"><div class="struct-pane-head"><strong>ANALYSE</strong><span class="struct-status"></span></div><div class="struct-view-tabs" role="tablist" aria-label="Diagrammansicht"><button data-struct-view="struct" role="tab">Struktogramm</button><button data-struct-view="flow" role="tab">Flussdiagramm</button><button data-struct-view="uml" role="tab">UML-Klassen</button></div><div class="struct-add"><span>Manuell ergänzen:</span><button data-struct-add="statement">+ Anweisung</button><button data-struct-add="if">+ Wenn</button><button data-struct-add="loop">+ Schleife</button><button data-struct-add="function">+ Funktion</button><button data-struct-add="class">+ Klasse</button></div><div class="struct-diagram" aria-live="polite"></div></section></div>`;
-    const codeArea=$('.struct-code',w.content),diagram=$('.struct-diagram',w.content),language=$('[data-struct-language]',w.content),status=$('.struct-status',w.content),viewButtons=[...w.content.querySelectorAll('[data-struct-view]')];
-    const render=()=>{
-      status.textContent=`${structCountNodes(state.nodes)} Bausteine · ${structClasses(state.nodes).length} Klassen`;
-      viewButtons.forEach(button=>{button.classList.toggle('active',button.dataset.structView===state.view);button.setAttribute('aria-selected',button.dataset.structView===state.view?'true':'false')});
-      diagram.innerHTML=state.view==='flow'?flowHTML():state.view==='uml'?umlHTML():`<div class="struct-tree">${state.nodes.length?state.nodes.map(nodeHTML).join(''):'<div class="diagram-empty">Kein Code erkannt.</div>'}</div>`;
-      diagram.querySelectorAll('[data-struct-field]').forEach(input=>input.addEventListener('input',()=>{const node=structFindNode(state.nodes,input.dataset.structNode);if(!node)return;if(input.dataset.structField==='bases')node.bases=input.value.split(',').map(value=>value.trim()).filter(Boolean);else node[input.dataset.structField]=input.value;}));
-      diagram.querySelectorAll('[data-struct-remove]').forEach(button=>button.addEventListener('click',()=>{removeStructNode(state.nodes,button.dataset.structRemove);render()}));
-    };
-    viewButtons.forEach(button=>button.addEventListener('click',()=>{state.view=button.dataset.structView;render()}));
-    w.content.querySelectorAll('[data-struct-add]').forEach(button=>button.addEventListener('click',()=>{state.nodes.push(addNode(button.dataset.structAdd));state.view='struct';render()}));
-    language.addEventListener('change',()=>{codeArea.value=structCodeFromNodes(state.nodes,language.value);state.language=language.value;state.view='struct';render()});
-    w.content.querySelectorAll('[data-struct-action]').forEach(button=>button.addEventListener('click',()=>{
-      const action=button.dataset.structAction;
-      if(action==='parse'){state.nodes=parseStructuredCode(codeArea.value,state.language);state.view='struct';render();this.toast(`${structCountNodes(state.nodes)} Bausteine aus dem Code erkannt`)}
-      if(action==='generate'){codeArea.value=structCodeFromNodes(state.nodes,state.language);this.toast('Code aus dem Programmbaum erzeugt')}
-      if(action==='example'){codeArea.value=exampleFor(state.language);state.nodes=parseStructuredCode(codeArea.value,state.language);state.view='struct';render();this.toast('Verschachteltes Beispiel geladen')}
-      if(action==='editor'){const ext=STRUCT_LANGUAGES[state.language].extension,file=`diagramm-struktur.${ext}`,code=structCodeFromNodes(state.nodes,state.language);this.fs.write(file,code,joinPath(homePath(this.currentOS),'Projects'));this.openEditor(file,joinPath(homePath(this.currentOS),'Projects'));this.toast('Diagramm-Code im Editor geöffnet')}
-    }));
-    render();return w;
+  resetData(){this.confirmDialog(`Alle virtuellen Dateien, Datenbanken, Pakete und Git-Daten von ${this.os.label} zurücksetzen?`,'Zurücksetzen').then(ok=>{if(!ok)return;this.fs.reset();this.db.reset();this.git.reset();try{localStorage.removeItem('desktopsim-v3-pkgs-'+this.currentOS);localStorage.removeItem('desktopsim-v3-settings-'+this.currentOS)}catch{}this._settings=null;this.notifyFiles();this.renderDesktopIcons();this.applyAppearance();this.notify('Zurückgesetzt','Die virtuellen Daten wurden auf den Ausgangszustand gesetzt.','settings')})}
+  /** Öffnet einen Pfad mit der passenden App (Doppelklick im Dateimanager, open/start im Terminal). */
+  openPath(path,{editor=false}={}){
+    const node=this.fs.locate(path);if(!node)return;
+    if(node.type==='dir')return this.openFiles(path);
+    const ext=extName(path);
+    if(!editor&&(ext==='html'||ext==='htm'))return this.openBrowser('file://'+path);
+    if(node.enc==='wasm'||(node.enc==='exe'&&!/\.(exe)$/i.test(path)))return this.openTerminal(null,{cwd:path.replace(/\/[^/]*$/,'')||'/',command:(isWindows(this.currentOS)?'':'./')+path.split('/').pop()});
+    if(node.enc==='exe')return this.termEngine.programs.runFile(path,this.termEngine.context([path.split('/').pop()],{os:this.currentOS,shell:this.os.shell,cwd:'/',vars:{},aliases:{},history:[]},{out(){},err(){},readLine:async()=>null}));
+    if(ext==='bat'||ext==='cmd'||ext==='ps1'||(ext==='sh'&&(node.mode&0o111)))return this.openTerminal(ext==='ps1'?'powershell':null,{cwd:path.replace(/\/[^/]*$/,'')||'/',command:(ext==='sh'?'./':ext==='ps1'?'.\\':'')+path.split('/').pop()});
+    if(['py','js','java','c','cpp','php','cs','sql','json','md','css','h','sh'].includes(ext)&&!editor)return this.openIDE(path);
+    if(node.enc==='b64'&&/\.(png|jpe?g|gif|svg|webp)$/i.test(path))return this.openImage(path);
+    return this.openEditor(path);
   }
-  openBrowser(path,base,customHTML){
-    const w=this.makeWindow('browser','Browser · localhost','browser',{width:780,height:560});w.content.className='window-content browser-content';
-    w.content.innerHTML=`<div class="browser-toolbar"><button data-browser="back" aria-label="Startseite">⌂</button><button data-browser="refresh" aria-label="Neu laden">↻</button><input class="browser-address" aria-label="Adresse" spellcheck="false" value="${escapeHTML(path||'http://localhost:8000')}"><button data-browser="go">Öffnen →</button></div><div class="browser-area"></div><div class="browser-status">Virtueller Browser · localhost und datenflix007.github.io · isolierte Darstellung</div>`;
-    const addr=$('.browser-address',w.content),view=$('.browser-area',w.content);
-    const landing=`<div class="browser-welcome"><div class="welcome-globe">${svg('browser',48)}</div><h2>Dein Webbrowser</h2><p>HTML-Dateien aus dem virtuellen Dateisystem anzeigen, einen simulierten localhost-Server besuchen oder die Datenflix-Webseite im Fenster erkunden.</p><code>python -m http.server 8000</code><p>Öffne danach <strong>http://localhost:8000</strong>, <strong>index.html</strong> oder <strong>https://datenflix007.github.io/</strong>.</p><div class="browser-welcome-actions"><button data-sample="open">Beispiel-Webseite</button><button data-sample="datenflix">Datenflix öffnen</button></div></div>`;
-    const navigate=()=>{
-      const target=addr.value.trim();view.innerHTML='';let html=null;
-      if(customHTML!==undefined){html=customHTML;customHTML=undefined}
-      else if(target.startsWith('about:')||!target){view.innerHTML=landing;view.querySelector('[data-sample="open"]')?.addEventListener('click',()=>{addr.value='index.html';navigate()});view.querySelector('[data-sample="datenflix"]')?.addEventListener('click',()=>{addr.value='https://datenflix007.github.io/';navigate()});return;}
-      else if(/^(https?:\/\/)?(localhost|127\.0\.0\.1)/i.test(target)){
-        const m=target.match(/^(?:https?:\/\/)?(?:localhost|127\.0\.0\.1)(?::(\d+))?(\/[^?#]*)?/i);const port=m?.[1]||'8000',sv=this.servers.get(port);
-        if(!sv){view.innerHTML=`<div class="browser-error"><h2>Verbindung abgelehnt</h2><p>Auf localhost:${escapeHTML(port)} läuft kein virtueller Server.</p><code>python -m http.server ${escapeHTML(port)}</code></div>`;return;}
-        try{html=this.fs.read(joinPath(sv.cwd,m?.[2]?.slice(1)||'index.html'))}catch(e){view.innerHTML='<div class="browser-error"><h2>404 – Datei nicht gefunden</h2><p>'+escapeHTML(e.message)+'</p></div>';return;}
-      }else if(/^https:\/\/datenflix007\.github\.io(?:\/|$)/i.test(target)){
-        const iframe=document.createElement('iframe');iframe.setAttribute('sandbox','allow-scripts allow-forms allow-popups allow-modals allow-downloads');iframe.title='Datenflix-Webseite im Browserfenster';iframe.referrerPolicy='no-referrer';iframe.src=target;view.append(iframe);return;
-      }else{
-        try{html=this.fs.read(target,base||joinPath(homePath(this.currentOS),'Projects'))}catch(e){view.innerHTML=`<div class="browser-error"><h2>Adresse nicht verfügbar</h2><p>Nutze <code>localhost:8000</code>, eine virtuelle HTML-Datei oder <code>https://datenflix007.github.io/</code>.</p><small>Andere externe Webseiten bleiben in dieser Lern-Sandbox gesperrt.</small></div>`;return;}
-      }
-      // allow-scripts erlaubt lokales HTML/JS; ohne allow-same-origin ist ein Zugriff auf DesktopSim ausgeschlossen.
-      const iframe=document.createElement('iframe');iframe.setAttribute('sandbox','allow-scripts');iframe.title='HTML-Vorschau in isolierter Sandbox';iframe.referrerPolicy='no-referrer';iframe.srcdoc=String(html).slice(0,300_000);view.append(iframe);
+  openImage(path){const node=this.fs.locate(path);const w=this.makeWindow('image',path.split('/').pop(),'editor',{width:620,height:480});w.content.className='window-content image-viewer';const mime=/\.png$/i.test(path)?'image/png':/\.svg$/i.test(path)?'image/svg+xml':'image/jpeg';w.content.innerHTML=`<img alt="${esc(path.split('/').pop())}" src="data:${mime};base64,${node.content}">`;return w}
+
+  // ---------- Fenstermanager ----------
+  workArea(){return{w:this.layer.clientWidth,h:this.layer.clientHeight}}
+  makeWindow(kind,title,icon='editor',preferred={}){
+    icon=LEGACY_ICONS[icon]||icon;
+    const id=++this.serial,area=this.workArea();
+    const width=Math.round(Math.min(preferred.width||760,Math.max(300,area.w-24)));
+    const height=Math.round(Math.min(preferred.height||500,Math.max(240,area.h-24)));
+    const visible=[...this.windows.values()].filter(w=>!w.minimized).length;
+    const offset=(visible%8)*28;
+    const left=Math.max(4,Math.min(Math.round((area.w-width)/2-90+offset),area.w-width-4));
+    const top=Math.max(4,Math.min(Math.round((area.h-height)/2-50+offset),area.h-height-4));
+    const el=document.createElement('section');el.className='sim-window opening';el.dataset.window=id;el.dataset.kind=kind;el.setAttribute('role','dialog');el.setAttribute('aria-label',title);
+    el.style.cssText=`width:${width}px;height:${height}px;left:${left}px;top:${top}px;z-index:${++this.z}`;
+    el.innerHTML=this.chrome.frame(title,icon)+'<div class="window-content"></div>'+['n','e','s','w','ne','nw','se','sw'].map(d=>`<div class="rh rh-${d}" data-rh="${d}"></div>`).join('');
+    this.layer.append(el);
+    const win={id,kind,title,icon,element:el,content:$('.window-content',el),titleSlot:$('.win-titleslot',el),minimized:false,maximized:false,snapped:null,restore:{left,top,width,height},workspace:this.workspace,modal:preferred.modal};
+    this.windows.set(id,win);
+    el.addEventListener('pointerdown',()=>this.focusWindow(win),true);
+    $$('[data-wbtn]',el).forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();const a=b.dataset.wbtn;if(a==='close')this.closeWindowById(id);else if(a==='min')this.minimizeWindow(win);else if(a==='max')this.toggleMax(win);else if(a==='menu')this.chrome.windowMenu(win,b)}));
+    if(this.profile.snap&&!preferred.noResize)$('[data-wbtn="max"]',el)?.addEventListener('mouseenter',()=>this.chrome.snapLayouts?.(win));
+    this.attachDragging(win);if(!preferred.noResize)this.attachResizing(win);else el.classList.add('fixed-size');
+    this.focusWindow(win);this.chrome.updateTasks();
+    requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.remove('opening')));
+    return win;
+  }
+  attachDragging(win){
+    const bar=$('.win-titlebar',win.element);let drag=null;
+    bar.addEventListener('pointerdown',e=>{
+      if(e.button!==0||e.target.closest('button,input,select,a,.win-tab'))return;
+      const el=win.element;const area=this.workArea();
+      drag={x:e.clientX,y:e.clientY,left:el.offsetLeft,top:el.offsetTop,moved:false,area,fromMax:win.maximized||win.snapped};
+      bar.setPointerCapture(e.pointerId);
+    });
+    bar.addEventListener('pointermove',e=>{
+      if(!drag)return;const el=win.element,dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+      if(!drag.moved&&Math.hypot(dx,dy)<4)return;
+      if(!drag.moved){drag.moved=true;el.classList.add('dragging');
+        if(drag.fromMax){const ratio=(e.clientX-el.getBoundingClientRect().left)/el.offsetWidth;win.maximized=false;win.snapped=null;el.classList.remove('maximized','snapped');Object.assign(el.style,{width:win.restore.width+'px',height:win.restore.height+'px'});drag.left=e.clientX-this.layer.getBoundingClientRect().left-win.restore.width*ratio;drag.top=0;drag.x=e.clientX;drag.y=e.clientY;this.chrome.updateTasks()}}
+      const left=drag.left+e.clientX-drag.x,top=Math.max(0,Math.min(drag.area.h-30,drag.top+e.clientY-drag.y));
+      el.style.left=Math.max(-el.offsetWidth+80,Math.min(drag.area.w-80,left))+'px';el.style.top=top+'px';
+      if(this.profile.snap){const r=this.layer.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;drag.snap=y<=2?'max':x<=4?'left':x>=r.width-5?'right':null;this.chrome.snapPreview(drag.snap)}
+    });
+    const end=()=>{if(!drag)return;win.element.classList.remove('dragging');if(drag.snap)this.snapWindow(win,drag.snap);this.chrome.snapPreview(null);drag=null};
+    bar.addEventListener('pointerup',end);bar.addEventListener('pointercancel',end);
+    bar.addEventListener('dblclick',e=>{if(e.target.closest('button,input,.win-tab'))return;if(this.currentOS==='macos'||!win.element.classList.contains('fixed-size'))this.toggleMax(win)});
+  }
+  attachResizing(win){
+    const el=win.element;
+    $$('[data-rh]',el).forEach(h=>{
+      let s=null;
+      h.addEventListener('pointerdown',e=>{if(e.button!==0||win.maximized)return;e.preventDefault();e.stopPropagation();h.setPointerCapture(e.pointerId);s={x:e.clientX,y:e.clientY,l:el.offsetLeft,t:el.offsetTop,w:el.offsetWidth,h:el.offsetHeight,d:h.dataset.rh};win.snapped=null;el.classList.remove('snapped');el.classList.add('resizing')});
+      h.addEventListener('pointermove',e=>{if(!s)return;const dx=e.clientX-s.x,dy=e.clientY-s.y,minW=300,minH=200;let{l,t,w,h:hh}=s;
+        if(s.d.includes('e'))w=Math.max(minW,s.w+dx);if(s.d.includes('s'))hh=Math.max(minH,s.h+dy);
+        if(s.d.includes('w')){w=Math.max(minW,s.w-dx);l=s.l+(s.w-w)}if(s.d.includes('n')){hh=Math.max(minH,s.h-dy);t=Math.max(0,s.t+(s.h-hh))}
+        Object.assign(el.style,{left:l+'px',top:t+'px',width:w+'px',height:hh+'px'})});
+      const end=()=>{if(s){s=null;el.classList.remove('resizing');win.restore={left:el.offsetLeft,top:el.offsetTop,width:el.offsetWidth,height:el.offsetHeight};win.onResize?.()}};
+      h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);
+    });
+  }
+  snapWindow(win,where){
+    const el=win.element;if(where==='max'){if(!win.maximized)this.toggleMax(win);return}
+    if(!win.maximized&&!win.snapped)win.restore={left:el.offsetLeft,top:el.offsetTop,width:el.offsetWidth,height:el.offsetHeight};
+    win.maximized=false;el.classList.remove('maximized');win.snapped=where;el.classList.add('snapped');
+    const{w,h}=this.workArea();const quarter=where.length>5;
+    Object.assign(el.style,{top:(where.includes('bottom')?h/2:0)+'px',left:(where.includes('right')?w/2:0)+'px',width:w/2+'px',height:(quarter?h/2:h)+'px'});
+    this.focusWindow(win);this.chrome.updateTasks();setTimeout(()=>win.onResize?.(),220);
+  }
+  focusWindow(win){
+    if(!win||!this.windows.has(win.id))return;
+    win.element.style.zIndex=++this.z;
+    for(const other of this.windows.values()){const active=other===win;other.element.classList.toggle('inactive',!active);other.element.classList.toggle('active',active)}
+    this.activeWindow=win;this.chrome.onFocus(win);
+  }
+  destroyWindow(w){try{w.cleanup?.()}catch{}w.element.remove()}
+  closeWindowById(id){
+    const w=this.windows.get(+id);if(!w)return;
+    if(w.beforeClose&&w.beforeClose()===false)return;
+    this.windows.delete(+id);w.element.classList.add('closing');
+    setTimeout(()=>this.destroyWindow(w),this.currentOS==='winxp'||this.currentOS==='unix'?0:160);
+    const next=[...this.windows.values()].filter(x=>!x.minimized&&x.workspace===this.workspace).sort((a,b)=>b.element.style.zIndex-a.element.style.zIndex)[0];
+    if(next)this.focusWindow(next);else{this.activeWindow=null;this.chrome.onFocus(null)}
+    this.chrome.updateTasks();
+  }
+  minimizeWindow(w){
+    const target=this.chrome.taskButtonRect?.(w);const el=w.element;
+    if(target&&this.currentOS!=='winxp'&&this.currentOS!=='unix'){const r=el.getBoundingClientRect();el.style.setProperty('--min-x',`${target.left+target.width/2-(r.left+r.width/2)}px`);el.style.setProperty('--min-y',`${target.top+target.height/2-(r.top+r.height/2)}px`)}
+    w.minimized=true;el.classList.add('minimized');
+    const next=[...this.windows.values()].filter(x=>!x.minimized&&x!==w&&x.workspace===this.workspace).sort((a,b)=>b.element.style.zIndex-a.element.style.zIndex)[0];
+    if(next)this.focusWindow(next);else{this.activeWindow=null;el.classList.add('inactive');this.chrome.onFocus(null)}
+    this.chrome.updateTasks();
+  }
+  restoreWindow(w){w.minimized=false;w.element.classList.remove('minimized');if(w.workspace!==this.workspace)this.chrome.switchWorkspace?.(w.workspace);this.focusWindow(w);this.chrome.updateTasks()}
+  toggleMax(w){
+    const e=w.element;
+    if(!w.maximized){if(!w.snapped)w.restore={left:e.offsetLeft,top:e.offsetTop,width:e.offsetWidth,height:e.offsetHeight};w.maximized=true;w.snapped=null;e.classList.remove('snapped');e.classList.add('maximized')}
+    else{w.maximized=false;e.classList.remove('maximized');Object.assign(e.style,{left:w.restore.left+'px',top:w.restore.top+'px',width:w.restore.width+'px',height:w.restore.height+'px'})}
+    this.focusWindow(w);this.chrome.updateTasks();setTimeout(()=>w.onResize?.(),220);
+  }
+  showDesktop(){const visible=[...this.windows.values()].filter(w=>!w.minimized);if(visible.length){this._shown=visible;visible.forEach(w=>{w.minimized=true;w.element.classList.add('minimized')})}else if(this._shown){this._shown.forEach(w=>{w.minimized=false;w.element.classList.remove('minimized')});this._shown=null}this.chrome.updateTasks()}
+  keepInBounds(){const{w,h}=this.workArea();for(const win of this.windows.values()){if(win.maximized)continue;const el=win.element;if(win.snapped){this.snapWindow(win,win.snapped);continue}el.style.left=Math.min(el.offsetLeft,Math.max(0,w-120))+'px';el.style.top=Math.min(el.offsetTop,Math.max(0,h-60))+'px'}}
+  updateTitle(w,title){w.title=title;const t=$('.win-title',w.element);if(t)t.textContent=title;w.element.setAttribute('aria-label',title);this.chrome.updateTasks();if(this.activeWindow===w)this.chrome.onFocus(w)}
+  updateTerminalTitle(t){const w=this.windows.get(t.windowId);if(w&&w.setShellTitle)w.setShellTitle(t);else if(w)this.updateTitle(w,this.terminalTitle(t))}
+
+  // ---------- Desktop-Symbole ----------
+  desktopItems(){
+    const items=this.profile.desktop.map(id=>({key:'app:'+id,app:id,label:this.appName(id),icon:id==='trash'?(this.trashFull()?'trash-full':'trash'):id}));
+    const desk=joinPath(homePath(this.currentOS),'Desktop');
+    if(this.profile.family!=='cde'){try{for(const e of this.fs.list(desk))if(!e.name.startsWith('.'))items.push({key:'file:'+e.name,path:joinPath(desk,e.name),label:e.name,type:e.type})}catch{}}
+    return items;
+  }
+  trashFull(){try{return this.fs.list(trashPath(this.currentOS)).length>0}catch{return false}}
+  renderDesktopIcons(){
+    const box=$('#desktop-icons');const items=this.desktopItems();const fam=this.profile.family;const pos=this.settings.icons||{};
+    const cell=fam==='mac'?{w:96,h:98}:fam==='windows'?{w:84,h:92}:{w:96,h:100};
+    const rightAlign=fam==='mac';const area={h:Math.max(200,this.desktop.clientHeight-(fam==='windows'?60:fam==='mac'?110:fam==='kde'?70:60))};
+    const rows=Math.max(1,Math.floor(area.h/cell.h));let auto=0;
+    box.innerHTML=items.map(it=>{let p=pos[it.key];if(!p){p={col:Math.floor(auto/rows),row:auto%rows};auto++}else auto=Math.max(auto,0);const icon=it.app?(it.icon==='trash-full'?appIcon('trash'):(it.app==='files'||it.app==='docs'||it.app==='home'?folderIcon(fam==='windows'?'windows':fam):appIcon(it.app,fam))):it.type==='dir'?folderIcon(fam==='windows'?'windows':fam):fileIcon(it.label,fam);return`<button class="desk-icon" type="button" data-key="${esc(it.key)}" style="${rightAlign?'right':'left'}:${8+p.col*cell.w}px;top:${(fam==='windows'?6:fam==='mac'?8:10)+p.row*cell.h}px"><span class="desk-img">${icon}</span><span class="desk-label">${esc(it.label)}</span></button>`}).join('');
+    this.desktopItemsCache=items;this.bindDesktopIcons(cell,rightAlign,rows);
+  }
+  bindDesktopIcons(cell,rightAlign){
+    const box=$('#desktop-icons');const find=key=>this.desktopItemsCache.find(i=>i.key===key);
+    const open=it=>{if(!it)return;if(it.app)this.launch(it.app);else this.openPath(it.path)};
+    $$('.desk-icon',box).forEach(el=>{
+      let drag=null,lastClick=0;
+      el.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.stopPropagation();if(!e.ctrlKey&&!el.classList.contains('selected'))$$('.desk-icon.selected',box).forEach(x=>x.classList.remove('selected'));el.classList.add('selected');drag={x:e.clientX,y:e.clientY,l:el.offsetLeft,t:el.offsetTop,moved:false};el.setPointerCapture(e.pointerId)});
+      el.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.hypot(dx,dy)<5)return;drag.moved=true;el.classList.add('dragging');el.style.left=drag.l+dx+'px';el.style.right='auto';el.style.top=drag.t+dy+'px'});
+      el.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;el.classList.remove('dragging');
+        if(d.moved){const target=document.elementsFromPoint(e.clientX,e.clientY).find(x=>x!==el&&x.classList?.contains('desk-icon'));const it=find(el.dataset.key);const tgt=target&&find(target.dataset.key);
+          if(tgt&&it?.path&&(tgt.app==='trash')){this.fs.trash(it.path);this.renderDesktopIcons();this.notifyFiles();return}
+          const col=Math.max(0,Math.round((rightAlign?(box.clientWidth-el.offsetLeft-el.offsetWidth-8):el.offsetLeft-8)/cell.w));const row=Math.max(0,Math.round((el.offsetTop-8)/cell.h));const icons={...(this.settings.icons||{})};for(const[k,v]of Object.entries(icons))if(v.col===col&&v.row===row&&k!==el.dataset.key)delete icons[k];icons[el.dataset.key]={col,row};this.setSetting('icons',icons);this.renderDesktopIcons();return}
+        const now=Date.now();if(now-lastClick<450||matchMedia('(pointer: coarse)').matches){open(find(el.dataset.key));lastClick=0}else lastClick=now});
+      el.addEventListener('keydown',e=>{if(e.key==='Enter')open(find(el.dataset.key));if(e.key==='Delete'){const it=find(el.dataset.key);if(it?.path){this.fs.trash(it.path);this.renderDesktopIcons()}}if(e.key==='F2')this.renameDesktopItem(find(el.dataset.key))});
+      el.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();const it=find(el.dataset.key);$$('.desk-icon.selected',box).forEach(x=>x.classList.remove('selected'));el.classList.add('selected');
+        const items=[{label:'Öffnen',bold:true,action:()=>open(it)}];
+        if(it.app==='trash')items.push({label:'Papierkorb leeren',disabled:!this.trashFull(),action:()=>{this.fs.emptyTrash();this.renderDesktopIcons();this.notifyFiles()}});
+        if(it.path){items.push({sep:true},{label:'Im Terminal öffnen',action:()=>this.openTerminal(null,{cwd:it.type==='dir'?it.path:it.path.replace(/\/[^/]*$/,'')})},{label:'Umbenennen',action:()=>this.renameDesktopItem(it)},{label:this.profile.family==='windows'?'Löschen':'In den Papierkorb verschieben',action:()=>{this.fs.trash(it.path);this.renderDesktopIcons();this.notifyFiles()}})}
+        items.push({sep:true},{label:'Eigenschaften',action:()=>this.openProperties(it.path||null,it)});
+        this.chrome.contextMenu(e.clientX,e.clientY,items)});
+    });
+  }
+  async renameDesktopItem(it){if(!it?.path)return;const name=await this.promptDialog('Neuer Name:',it.label,'Umbenennen');if(!name||name===it.label)return;try{this.fs.move(it.path,joinPath(it.path.replace(/\/[^/]*$/,''),name));this.renderDesktopIcons();this.notifyFiles()}catch(e){this.notify('Fehler',e.message,'about')}}
+  desktopContextMenu(x,y){
+    const desk=joinPath(homePath(this.currentOS),'Desktop');const fam=this.profile.family;
+    const create=async kind=>{const base=kind==='dir'?(fam==='windows'?'Neuer Ordner':fam==='mac'?'Neuer Ordner':'Neuer Ordner'):(fam==='windows'?'Neues Textdokument.txt':'Neue Datei.txt');let name=base,i=2;while(this.fs.exists(joinPath(desk,name)))name=kind==='dir'?`${base} (${i++})`:base.replace(/(\.txt)$/,` (${i++})$1`);if(kind==='dir')this.fs.mkdir(joinPath(desk,name));else this.fs.write(joinPath(desk,name),'');this.renderDesktopIcons();const it=this.desktopItemsCache.find(x=>x.label===name);setTimeout(()=>this.renameDesktopItem(it),50)};
+    const sortIcons=()=>{this.setSetting('icons',{});this.renderDesktopIcons()};
+    const menus={
+      windows:[{label:'Ansicht',submenu:[{label:'Große Symbole',action:()=>this.desktop.dataset.iconSize='large'},{label:'Mittelgroße Symbole',action:()=>this.desktop.dataset.iconSize='medium'},{label:'Kleine Symbole',action:()=>this.desktop.dataset.iconSize='small'},{sep:true},{label:'Symbole automatisch anordnen',action:sortIcons}]},{label:'Sortieren nach',submenu:[{label:'Name',action:sortIcons},{label:'Größe',action:sortIcons},{label:'Elementtyp',action:sortIcons},{label:'Änderungsdatum',action:sortIcons}]},{label:'Aktualisieren',action:()=>this.renderDesktopIcons()},{sep:true},{label:'Einfügen',disabled:!this.clipboard,action:()=>this.pasteInto(desk)},{sep:true},{label:'Neu',submenu:[{label:'Ordner',icon:'folderPlus',action:()=>create('dir')},{label:'Textdokument',icon:'filePlus',action:()=>create('file')}]},{sep:true},{label:this.currentOS==='winxp'?'Eigenschaften':'Anzeigeeinstellungen',action:()=>this.openSettings('display')},{label:'Anpassen',action:()=>this.openSettings('personalize')},...(['win10','win11'].includes(this.currentOS)?[{sep:true},{label:'Im Terminal öffnen',action:()=>this.openTerminal(null,{cwd:desk})}]:[])],
+      gnome:[{label:'Neuer Ordner',action:()=>create('dir')},{label:'Neues Dokument',action:()=>create('file')},{sep:true},{label:'Einfügen',disabled:!this.clipboard,action:()=>this.pasteInto(desk)},{sep:true},{label:'Schreibtisch im Dateimanager öffnen',action:()=>this.openFiles(desk)},{label:'Im Terminal öffnen',action:()=>this.openTerminal(null,{cwd:desk})},{sep:true},{label:'Hintergrund ändern …',action:()=>this.openSettings('personalize')},{label:'Bildschirmeinstellungen',action:()=>this.openSettings('display')}],
+      kde:[{label:'Neu erstellen',submenu:[{label:'Ordner …',action:()=>create('dir')},{label:'Textdatei …',action:()=>create('file')}]},{label:'Einfügen',disabled:!this.clipboard,action:()=>this.pasteInto(desk)},{sep:true},{label:'Konsole hier öffnen',action:()=>this.openTerminal(null,{cwd:desk})},{label:'Symbole anordnen',action:sortIcons},{sep:true},{label:'Plasma-Arbeitsfläche einrichten …',action:()=>this.openSettings('personalize')},{label:'Bildschirmeinstellungen',action:()=>this.openSettings('display')}],
+      mac:[{label:'Neuer Ordner',action:()=>create('dir')},{sep:true},{label:'Informationen',action:()=>this.openProperties(desk)},{label:'Einfügen',disabled:!this.clipboard,action:()=>this.pasteInto(desk)},{sep:true},{label:'Schreibtischhintergrund ändern …',action:()=>this.openSettings('personalize')},{label:'Aufräumen',action:sortIcons},{label:'Darstellungsoptionen einblenden',action:()=>this.openSettings('display')}],
+      cde:[{label:'Arbeitsbereichsmenü',header:true},{label:'Programme',submenu:['terminal','files','editor','ide','browser','calc','git','structogram','game','sql'].map(id=>({label:this.appName(id),action:()=>this.launch(id)}))},{sep:true},{label:'Terminal …',action:()=>this.launch('terminal')},{label:'Dateimanager …',action:()=>this.launch('files')},{label:'Stilmanager …',action:()=>this.launch('settings')},{sep:true},{label:'Arbeitsbereiche aufräumen',action:()=>this.showDesktop()},{label:'Bildschirm sperren',action:()=>this.power('lock')},{label:'Abmelden …',action:()=>this.power('logout')}]
     };
-    w.content.querySelectorAll('[data-browser]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.browser==='back')addr.value='about:home';navigate()}));$('[data-browser="go"]',w.content).addEventListener('click',navigate);addr.addEventListener('keydown',e=>{if(e.key==='Enter')navigate()});if(!path)addr.value='about:home';navigate();return w;
+    this.chrome.contextMenu(x,y,menus[fam]||menus.windows);
   }
-  openSQL(){
-    const w=this.makeWindow('sql','SQL Studio · virtuelles SQLite','database',{width:800,height:570});w.content.className='window-content sql-content';const presets=[['Alle Datensätze','SELECT * FROM schueler;'],['Filtern',"SELECT name, punkte FROM schueler WHERE klasse = '8a' ORDER BY punkte DESC;"],['Zählen','SELECT COUNT(*) AS anzahl FROM schueler;'],['Neue Tabelle','CREATE TABLE notizen (id INTEGER, text TEXT);']];
-    w.content.innerHTML=`<div class="sql-heading"><div><strong>SQL Playground</strong><span>Browser-Datenbank · echter Datenzustand, begrenzter SQL-Dialekt</span></div><button class="accent-action" data-sql-run>${svg('play',16)} Abfrage starten</button></div><div class="sql-examples">${presets.map(([name,query],i)=>`<button data-sql-preset="${i}">${escapeHTML(name)}</button>`).join('')}</div><textarea class="sql-editor" aria-label="SQL-Abfrage" spellcheck="false">SELECT * FROM schueler;</textarea><div class="sql-result-meta">ERGEBNIS <span class="sql-message">Bereit</span></div><div class="sql-result"></div><div class="sql-footer">Unterstützt: SELECT · WHERE · AND · LIKE · ORDER BY · LIMIT · COUNT · INSERT · UPDATE · DELETE · CREATE/DROP TABLE</div>`;
-    const edit=$('.sql-editor',w.content),result=$('.sql-result',w.content),message=$('.sql-message',w.content);
-    w.content.querySelectorAll('[data-sql-preset]').forEach(b=>b.addEventListener('click',()=>edit.value=presets[+b.dataset.sqlPreset][1]));
-    $('[data-sql-run]',w.content).addEventListener('click',()=>{try{const res=this.db.run(edit.value);message.textContent=res.message;if(!res.columns.length){result.innerHTML=`<div class="sql-empty">${escapeHTML(res.message)}</div>`;return}result.innerHTML=`<table><thead><tr>${res.columns.map(c=>`<th>${escapeHTML(c)}</th>`).join('')}</tr></thead><tbody>${res.rows.map(r=>`<tr>${res.columns.map(c=>`<td>${escapeHTML(r[c]===null?'NULL':r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`}catch(e){message.textContent='Fehler';result.innerHTML=`<div class="sql-error">${escapeHTML(e.message)}</div>`}});
-    $('[data-sql-run]',w.content).click();return w;
+  pasteInto(dir){const c=this.clipboard;if(!c)return;for(const p of c.paths){try{const name=p.split('/').pop();let target=joinPath(dir,name),i=2;while(this.fs.exists(target)&&c.mode==='copy')target=joinPath(dir,name.replace(/(\.[^.]*)?$/,` - Kopie${i>2?' ('+(i-1)+')':''}$1`)),i++;if(c.mode==='cut')this.fs.move(p,target);else this.fs.copy(p,target,null,true)}catch(e){this.notify('Einfügen fehlgeschlagen',e.message,'files')}}if(c.mode==='cut')this.clipboard=null;this.notifyFiles();this.renderDesktopIcons()}
+
+  // ---------- Dialoge & Benachrichtigungen ----------
+  notify(title,body='',icon='about'){this.chrome.notify(title,body,icon)}
+  toast(message){this.chrome.notify(this.os?.label||'DesktopSim',message,'about')}
+  dialog({title,message,input=null,buttons=[['OK',true]],icon='about'}){
+    return new Promise(resolve=>{
+      const w=this.makeWindow('dialog',title,icon,{width:420,height:input!==null?200:180,noResize:true,modal:true});w.element.classList.add('dialog-window');
+      w.content.className='window-content dialog-content';
+      w.content.innerHTML=`<div class="dlg-body"><span class="dlg-icon">${appIcon(icon,this.profile.family)}</span><div class="dlg-text"><p>${esc(message)}</p>${input!==null?`<input class="dlg-input" value="${esc(input)}">`:''}</div></div><div class="dlg-buttons">${buttons.map(([label,val],i)=>`<button type="button" data-i="${i}" class="${i===0?'primary':''}">${esc(label)}</button>`).join('')}</div>`;
+      let done=false;const finish=v=>{if(done)return;done=true;this.closeWindowById(w.id);resolve(v)};
+      w.beforeClose=()=>{if(!done){done=true;resolve(input!==null?null:false)}return true};
+      $$('[data-i]',w.content).forEach(b=>b.addEventListener('click',()=>{const val=buttons[+b.dataset.i][1];finish(val===true&&input!==null?$('.dlg-input',w.content).value:val)}));
+      const inp=$('.dlg-input',w.content);if(inp){setTimeout(()=>{inp.focus();inp.select()},60);inp.addEventListener('keydown',e=>{if(e.key==='Enter')finish(inp.value);if(e.key==='Escape')finish(null)})}else setTimeout(()=>$('[data-i="0"]',w.content)?.focus(),60);
+    });
   }
-  openGuide(){
-    const w=this.makeWindow('guide',`Hilfe · ${this.os.label}`,'info',{width:780,height:570});w.content.className='window-content guide-content';
-    const win=isWindows(this.currentOS);const commands=win?['dir','cd Projects','python hello.py','javac Main.java && java Main','g++ main.cpp -o hallo && hallo.exe','sqlite3 demo.db']:['ls -la','cd ~/Projects','python3 hello.py','javac Main.java && java Main','g++ main.cpp -o hallo && ./hallo','sqlite3 demo.db'];
-    w.content.innerHTML=`<div class="guide-intro"><div class="eyebrow">DESKTOPSIM / LERNMODUS</div><h2>Entdecke ${escapeHTML(this.os.label)}</h2><p>Eine interaktive Übungsumgebung für Desktop-Navigation, Kommandozeile, Dateisysteme und Programmierung.</p></div><div class="guide-sections"><article><h3>01 · Erste Befehle</h3><p>Klicke auf ein Beispiel, um ein neues Terminal mit dem eingegebenen Befehl zu öffnen.</p><div class="guide-chips">${commands.map(c=>`<button type="button" data-example="${escapeHTML(c)}"><code>${escapeHTML(c)}</code> ↗</button>`).join('')}</div></article><article><h3>02 · Dateien, Code und Struktogramme</h3><p>Im Dateimanager liegen unter <code>${escapeHTML(pathDisplay(this.currentOS,joinPath(homePath(this.currentOS),'Projects')))}</code> Beispiele für Python, Java, C, C++, JavaScript, C#, PHP, HTML und SQL. Der Editor prüft und zeigt Ausgaben für die Lernsprachen; die Struktogramm-Werkstatt erzeugt aus einfachen Python- oder JavaScript-Schritten einen Ablauf und kann ihn wieder als Code speichern.</p></article><article><h3>03 · Browser: localhost und Datenflix</h3><p>Starte in der Konsole <code>${win?'python':'python3'} -m http.server 8000</code> und öffne <code>http://localhost:8000</code>. Das bleibt ein <strong>virtueller</strong> Server. Zusätzlich kann der Browser <code>https://datenflix007.github.io/</code> im Fenster laden; dort kann normal weitergeklickt werden.</p></article><article><h3>04 · Was läuft wirklich?</h3><ul><li>Virtuelles Dateisystem: echte Bearbeitung von Simulationdateien mit Speicherung im Browser.</li><li>Struktogramm: ein lokaler Editor mit nachvollziehbarer, begrenzter Code-Umwandlung für Anweisungen, Bedingungen und Schleifen.</li><li>HTML/CSS/JavaScript: lokale Vorschauen in einem isolierten iframe; die freigegebene Datenflix-Seite wird ebenfalls isoliert eingebettet.</li><li>Python: echte Ausführung über Pyodide/WebAssembly, sobald der externe Download gelingt; offline nur vereinfachte Demo.</li><li>Java, C, C++, C#, PHP und Node: <strong>Quelltextprüfung und begrenzte Ausgabe-Demo</strong>. GitHub Pages kann keinen nativen javac-, g++-, GCC-, .NET- oder PHP-Prozess starten.</li><li>System-, Netzwerk- und Paketmanagerbefehle: sichere Beispiele, keine echten OS-Aktionen.</li></ul></article><article><h3>05 · Terminal-Referenz</h3><pre>${escapeHTML(shellHelp(this.currentOS))}</pre></article><article><h3>06 · Tastatur und Datenschutz</h3><p>↑ / ↓ = Verlauf · Tab = Vervollständigung · Ctrl+L = Terminal leeren · Ctrl+S = Editor speichern · Ctrl+Alt+T = neues Terminal.</p><p>Daten liegen ausschließlich im <code>localStorage</code> dieses Browsers und sind pro Betriebssystem getrennt. Import/Export ist über JSON möglich. GitHub Pages benötigt keinen Servercode.</p></article></div>`;
-    w.content.querySelector('.guide-sections').insertAdjacentHTML('beforeend','<article><h3>07 · Diagrammwerkstatt</h3><p>Die Struktogramm-App liest jetzt verschachtelte Python- sowie JavaScript-, Java-, C#- und C++-Blöcke als Programmbaum. Wechsle zwischen <strong>Struktogramm</strong>, <strong>Flussdiagramm</strong> und <strong>UML-Klassen</strong>; UML zeigt erkannte Klassen, Methoden, Eigenschaften, Vererbung und verwendete Klassen. Die Analyse ist lokal und bewusst kein vollständiger Compiler.</p></article>');
-    w.content.querySelectorAll('[data-example]').forEach(b=>b.addEventListener('click',()=>this.openTerminalWithCommand(b.dataset.example)));return w;
+  promptDialog(message,value='',title='Eingabe'){return this.dialog({title,message,input:value,buttons:[['OK',true],['Abbrechen',null]]})}
+  confirmDialog(message,okLabel='OK'){return this.dialog({title:this.os?.label||'DesktopSim',message,buttons:[[okLabel,true],['Abbrechen',false]],icon:'about'})}
+  openProperties(path,item){
+    const fs=this.fs;const name=path?path.split('/').pop()||'/':item?.label;const st=path?fs.stat(path):null;
+    const w=this.makeWindow('properties',`Eigenschaften von ${name}`,'about',{width:380,height:420,noResize:true});w.content.className='window-content props-content';
+    const size=st?.type==='dir'?(()=>{let n=0,c=0;const walk=p=>{for(const e of fs.list(p)){if(e.type==='dir')walk(joinPath(p,e.name));else{n+=e.size;c++}}};try{walk(path)}catch{}return`${n.toLocaleString('de-DE')} Bytes (${c} Dateien)`})():st?`${st.size.toLocaleString('de-DE')} Bytes`:'—';
+    w.content.innerHTML=`<div class="props-head"><span>${path?(st.type==='dir'?folderIcon(this.profile.family==='windows'?'windows':this.profile.family):fileIcon(name)):appIcon(item?.app||'about')}</span><strong>${esc(name)}</strong></div><dl class="props-grid"><dt>Typ:</dt><dd>${path?(st.type==='dir'?'Dateiordner':(extName(name).toUpperCase()||'Datei')+'-Datei'):'Verknüpfung'}</dd><dt>Ort:</dt><dd>${esc(path?pathDisplay(this.currentOS,path.replace(/\/[^/]*$/,'')||'/'):'Desktop')}</dd><dt>Größe:</dt><dd>${esc(size)}</dd>${st?`<dt>Geändert:</dt><dd>${new Date(st.mtime).toLocaleString('de-DE')}</dd>${isWindows(this.currentOS)?'':`<dt>Rechte:</dt><dd><code>${(st.mode).toString(8).padStart(4,'0')}</code></dd>`}`:''}</dl><div class="dlg-buttons"><button class="primary" data-ok>OK</button></div>`;
+    $('[data-ok]',w.content).addEventListener('click',()=>this.closeWindowById(w.id));return w;
   }
-  openTerminalWithCommand(command){const w=this.openTerminal();const input=$('.terminal-input',w.content);input.value=command;input.focus()}
-  notifyFiles(){for(const w of this.windows.values())if(w.kind==='files')w.refresh?.()}
-  downloadText(name,content,type='text/plain'){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-  exportFiles(){this.downloadText(`DesktopSim-${this.currentOS}-Backup.json`,JSON.stringify(this.fs.export(),null,2),'application/json');this.toast('JSON-Backup vorbereitet')}
+
+  // ---------- Energie ----------
+  async power(action){
+    this.chrome.closeMenus();
+    if(action==='lock'){await this.chrome.login(this.currentOS,{lock:true});return}
+    if(action==='sleep'){await this.chrome.sleep();return}
+    for(const w of [...this.windows.values()])this.destroyWindow(w);this.windows.clear();this.chrome.updateTasks();this.servers.clear();this.runtimes.stopAll();
+    if(action==='logout'){await this.chrome.shutdownScreen(this.currentOS,'logout');await this.chrome.login(this.currentOS,{});return}
+    await this.chrome.shutdownScreen(this.currentOS,action);
+    if(action==='restart'){await this.chrome.boot(this.currentOS,{quick:this.global.quickBoot});await this.chrome.login(this.currentOS,{});this.bootTime=Date.now();return}
+    this.desktop.classList.remove('ready');this.showLanding();
+  }
+
+  // ---------- Hilfen ----------
+  notifyFiles(){for(const w of this.windows.values())w.refresh?.();if(this.desktopItemsCache)this.renderDesktopIconsDebounced()}
+  renderDesktopIconsDebounced(){clearTimeout(this.iconTimer);this.iconTimer=setTimeout(()=>this.renderDesktopIcons(),80)}
+  notifyServers(){for(const w of this.windows.values())w.onServers?.()}
+  downloadText(name,content,type='text/plain'){const blob=content instanceof Blob?content:new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+  exportFiles(){this.downloadText(`DesktopSim-${this.currentOS}-Backup.json`,JSON.stringify(this.fs.export(),null,2),'application/json');this.notify('Export','JSON-Sicherung des virtuellen Dateisystems wird heruntergeladen.','files')}
+  gitCommand(ctx){return gitCommand(this,ctx)}
+  terminalTitle(t){const sh=t.shell==='powershell'?'Windows PowerShell':t.shell==='cmd'?(isWindows(this.currentOS)?'Eingabeaufforderung':'cmd'):null;if(isWindows(this.currentOS))return sh+(t.admin?' (Administrator)':'');if(this.currentOS==='macos')return`${pathDisplay(this.currentOS,t.cwd).split('/').pop()||'/'} — ${t.shell} — 80×24`;if(this.currentOS==='arch')return`${t.cwd===homePath(this.currentOS)?'~':t.cwd.split('/').pop()} : ${t.shell} — Konsole`;if(this.currentOS==='debian')return`${t.admin?'root':'student'}@debian-sim: ${t.cwd.replace(homePath(this.currentOS),'~')}`;return'Terminal'}
 }
 
-new DesktopSim();
+function install(target,...mixins){for(const M of mixins)for(const k of Object.getOwnPropertyNames(M.prototype))if(k!=='constructor')Object.defineProperty(target.prototype,k,Object.getOwnPropertyDescriptor(M.prototype,k))}
+install(DesktopSim,ClassicApps,TerminalApp,FilesApp,EditorApps,BrowserApp,SystemApps);
+window.desktopSim=new DesktopSim();
