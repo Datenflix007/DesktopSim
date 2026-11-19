@@ -4,63 +4,63 @@ export const PROFILES = {
     family: 'windows', chrome: 'xp', controls: 'right', snap: false, menuBar: false,
     names: { terminal: 'Eingabeaufforderung', files: 'Windows-Explorer', editor: 'Editor', browser: 'Internet Explorer', settings: 'Systemsteuerung', taskmgr: 'Windows Task-Manager', calc: 'Rechner', trash: 'Papierkorb', computer: 'Arbeitsplatz', docs: 'Eigene Dateien', about: 'Info über Windows', ide: 'Code-Editor (IDE)' },
     terminalTheme: 'conhost-classic', font: 'Tahoma, "Segoe UI", Verdana, sans-serif',
-    desktop: ['computer', 'docs', 'trash', 'browser', 'terminal', 'ide', 'git', 'structogram', 'game', 'sql', 'fun', 'guide'],
+    desktop: ['computer', 'docs', 'trash', 'browser', 'terminal', 'ide', 'git', 'structogram', 'game', 'sql', 'fun', 'guide', 'mindmap', 'dslab', 'mdgen', 'papermaker'],
     pinned: ['browser', 'terminal', 'files']
   },
   win7: {
     family: 'windows', chrome: 'aero', controls: 'right', snap: true,
     names: { terminal: 'Eingabeaufforderung', files: 'Windows-Explorer', editor: 'Editor', browser: 'Internet Explorer', settings: 'Systemsteuerung', taskmgr: 'Windows Task-Manager', calc: 'Rechner', trash: 'Papierkorb', computer: 'Computer', docs: 'Dokumente', about: 'Info über Windows', ide: 'Code-Editor (IDE)' },
     terminalTheme: 'conhost-classic', font: '"Segoe UI", Tahoma, sans-serif',
-    desktop: ['computer', 'trash', 'docs', 'terminal', 'ide', 'git', 'structogram', 'game', 'sql', 'fun', 'guide'],
+    desktop: ['computer', 'trash', 'docs', 'terminal', 'ide', 'git', 'structogram', 'game', 'sql', 'fun', 'guide', 'mindmap', 'dslab', 'mdgen', 'papermaker'],
     pinned: ['browser', 'files', 'terminal', 'ide']
   },
   win8: {
     family: 'windows', chrome: 'metro', controls: 'right', snap: true,
     names: { terminal: 'Eingabeaufforderung', files: 'Explorer', editor: 'Editor', browser: 'Internet Explorer', settings: 'Systemsteuerung', taskmgr: 'Task-Manager', calc: 'Rechner', trash: 'Papierkorb', computer: 'Dieser PC', docs: 'Dokumente', about: 'Info über Windows', ide: 'Code-Editor (IDE)' },
     terminalTheme: 'conhost-classic', font: '"Segoe UI", Tahoma, sans-serif',
-    desktop: ['computer', 'trash', 'terminal', 'ide', 'git', 'structogram', 'game', 'sql', 'fun', 'guide'],
+    desktop: ['computer', 'trash', 'terminal', 'ide', 'git', 'structogram', 'game', 'sql', 'fun', 'guide', 'mindmap', 'dslab', 'mdgen', 'papermaker'],
     pinned: ['browser', 'files', 'terminal']
   },
   win10: {
     family: 'windows', chrome: 'win10', controls: 'right', snap: true,
     names: { terminal: 'Eingabeaufforderung', files: 'Datei-Explorer', editor: 'Editor', browser: 'Microsoft Edge', settings: 'Einstellungen', taskmgr: 'Task-Manager', calc: 'Rechner', trash: 'Papierkorb', computer: 'Dieser PC', docs: 'Dokumente', about: 'Info über Windows', ide: 'Visual Studio Code' },
     terminalTheme: 'conhost', font: '"Segoe UI", system-ui, sans-serif',
-    desktop: ['trash', 'computer', 'terminal', 'ide', 'git', 'structogram', 'game', 'sql', 'fun', 'guide'],
+    desktop: ['trash', 'computer', 'terminal', 'ide', 'git', 'structogram', 'game', 'sql', 'fun', 'guide', 'mindmap', 'dslab', 'mdgen', 'papermaker'],
     pinned: ['files', 'browser', 'terminal', 'ide', 'settings']
   },
   win11: {
     family: 'windows', chrome: 'win11', controls: 'right', snap: true,
     names: { terminal: 'Terminal', files: 'Explorer', editor: 'Editor', browser: 'Microsoft Edge', settings: 'Einstellungen', taskmgr: 'Task-Manager', calc: 'Rechner', trash: 'Papierkorb', computer: 'Dieser PC', docs: 'Dokumente', about: 'Info über Windows', ide: 'Visual Studio Code' },
     terminalTheme: 'windows-terminal', font: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif',
-    desktop: ['trash', 'terminal', 'ide', 'git', 'structogram', 'game', 'sql', 'fun', 'guide'],
+    desktop: ['trash', 'terminal', 'ide', 'git', 'structogram', 'game', 'sql', 'fun', 'guide', 'mindmap', 'dslab', 'mdgen', 'papermaker'],
     pinned: ['files', 'browser', 'terminal', 'ide', 'settings', 'game']
   },
   debian: {
     family: 'gnome', chrome: 'adwaita', controls: 'close-only', snap: true,
     names: { terminal: 'Terminal', files: 'Dateien', editor: 'Texteditor', browser: 'Firefox', settings: 'Einstellungen', taskmgr: 'Systemüberwachung', calc: 'Taschenrechner', trash: 'Papierkorb', computer: 'Persönlicher Ordner', docs: 'Dokumente', about: 'Info', ide: 'Visual Studio Code' },
     terminalTheme: 'gnome', font: 'Cantarell, "Adwaita Sans", "Noto Sans", Inter, system-ui, sans-serif',
-    desktop: [],
+    desktop: ['mindmap', 'dslab', 'mdgen', 'papermaker'],
     pinned: ['browser', 'files', 'terminal', 'editor', 'ide', 'settings', 'game']
   },
   arch: {
     family: 'kde', chrome: 'breeze', controls: 'right', snap: true,
     names: { terminal: 'Konsole', files: 'Dolphin', editor: 'Kate', browser: 'Firefox', settings: 'Systemeinstellungen', taskmgr: 'Systemmonitor', calc: 'KCalc', trash: 'Papierkorb', computer: 'Persönlicher Ordner', docs: 'Dokumente', about: 'Infozentrum', ide: 'Visual Studio Code' },
     terminalTheme: 'breeze', font: '"Noto Sans", "Segoe UI", system-ui, sans-serif',
-    desktop: ['home', 'trash'],
+    desktop: ['home', 'trash', 'mindmap', 'dslab', 'mdgen', 'papermaker'],
     pinned: ['files', 'browser', 'terminal', 'ide']
   },
   macos: {
     family: 'mac', chrome: 'aqua', controls: 'left', snap: false, menuBar: true,
     names: { terminal: 'Terminal', files: 'Finder', editor: 'TextEdit', browser: 'Safari', settings: 'Systemeinstellungen', taskmgr: 'Aktivitätsanzeige', calc: 'Rechner', trash: 'Papierkorb', computer: 'Macintosh HD', docs: 'Dokumente', about: 'Über diesen Mac', ide: 'Visual Studio Code' },
     terminalTheme: 'mac-basic', font: '-apple-system, "SF Pro Text", "Helvetica Neue", Inter, system-ui, sans-serif',
-    desktop: [],
+    desktop: ['mindmap', 'dslab', 'mdgen', 'papermaker'],
     pinned: ['files', 'browser', 'terminal', 'editor', 'ide', 'calc', 'settings', 'game', 'git', 'sql']
   },
   unix: {
     family: 'cde', chrome: 'motif', controls: 'cde', snap: false,
     names: { terminal: 'Terminal', files: 'Dateimanager', editor: 'Texteditor', browser: 'Webbrowser', settings: 'Stilmanager', taskmgr: 'Prozessmanager', calc: 'Rechner', trash: 'Papierkorb', computer: 'Home', docs: 'Dokumente', about: 'Über CDE', ide: 'Code-Editor (IDE)' },
     terminalTheme: 'dtterm', font: '"Helvetica Neue", Helvetica, Arial, sans-serif',
-    desktop: [],
+    desktop: ['mindmap', 'dslab', 'mdgen', 'papermaker'],
     pinned: ['files', 'editor', 'terminal', 'browser', 'settings']
   }
 };

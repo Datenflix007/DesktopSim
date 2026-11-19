@@ -16,13 +16,14 @@ import {EditorApps} from './apps/editor-app.js';
 import {BrowserApp} from './apps/browser-app.js';
 import {SystemApps} from './apps/system-apps.js';
 import {IDEApp} from './apps/ide-app.js';
+import {WebApps} from './apps/web-apps.js';
 
 export const $=(s,root=document)=>root.querySelector(s);
 export const $$=(s,root=document)=>[...root.querySelectorAll(s)];
 export const esc=escapeHTML;
 const LEGACY_ICONS={python:'ide',branch:'git',sparkle:'fun',game:'game',structure:'structogram',code:'ide',folder:'files',terminal:'terminal',browser:'browser',database:'sql',info:'guide',file:'editor'};
 export const APPS=['terminal','files','editor','ide','browser','settings','taskmgr','calc','git','structogram','game','fun','sql','guide','about','trash','computer','docs','home'];
-const EXTRA_LABELS={git:'Git Graph',structogram:'Struktogramm',game:'OS-Spiel',fun:'Fun Lab',sql:'SQL Studio',guide:'Anleitung',home:'Persönlicher Ordner'};
+const EXTRA_LABELS={mindmap:'Gruppen-Mindmap',dslab:'DatastructureLab',mdgen:'Markdown Generator',papermaker:'Paper-Maker',git:'Git Graph',structogram:'Struktogramm',game:'OS-Spiel',fun:'Fun Lab',sql:'SQL Studio',guide:'Anleitung',home:'Persönlicher Ordner'};
 
 class DesktopSim{
   constructor(){
@@ -126,6 +127,7 @@ class DesktopSim{
       case'editor':return this.openEditor(opts.path||'',opts.cwd);case'ide':return this.openIDE(opts.path||'',opts.cwd);case'browser':return this.openBrowser(opts.url);
       case'settings':return this.openSettings(opts.page);case'taskmgr':return this.openTaskManager();case'calc':return this.openCalculator();case'about':return this.openAbout();
       case'git':return this.openGitGraph();case'structogram':return this.openStructogram();case'game':return this.openGame();case'fun':return this.openFunLab();case'sql':return this.openSQL();case'guide':return this.openGuide();
+      case'mindmap':case'dslab':case'mdgen':case'papermaker':return this.openWebApp(id);
       case'run':return this.openRunDialog();
       case'import':return $('#import-input').click();case'export':return this.exportFiles();
       case'reset':return this.resetData();
@@ -351,5 +353,5 @@ class DesktopSim{
 }
 
 function install(target,...mixins){for(const M of mixins)for(const k of Object.getOwnPropertyNames(M.prototype))if(k!=='constructor')Object.defineProperty(target.prototype,k,Object.getOwnPropertyDescriptor(M.prototype,k))}
-install(DesktopSim,ClassicApps,TerminalApp,FilesApp,EditorApps,BrowserApp,SystemApps,IDEApp);
+install(DesktopSim,ClassicApps,TerminalApp,FilesApp,EditorApps,BrowserApp,SystemApps,IDEApp,WebApps);
 window.desktopSim=new DesktopSim();
