@@ -72,3 +72,15 @@
 - [x] Neue Apps: Einstellungen, Task-Manager, Rechner, Info, Ausführen; Dateimanager, Editor, IDE, Browser, SQL Studio überarbeitet.
 - [x] Browser-Tests aller 9 Systeme × 20 Apps ohne Ausnahmen; Smoke-Test aktualisiert.
 - [ ] C++-Exceptions (benötigt Sysroot mit libunwind/EH) und C#-Laufzeit.
+
+## IDE (VS Code), GUI-Programme, Netzwerk, venv und Prolog
+- [x] IDE im Stil von VS Code: Menüleiste, Explorer, Suche/Ersetzen über Dateien, Quellcodeverwaltung, Ausführen, Erweiterungen, Befehlspalette, Quick Open, Minimap, Probleme/Ausgabe/Terminal/Ports, Terminal-Profile, Interpreter-Auswahl, Beispielprojekte.
+- [x] Editor: Hervorhebung für Python, Java, JS, C/C++, C#, PHP, SQL, Bash, PowerShell, Batch, Prolog, HTML/CSS/JSON; Autovervollständigung, Snippets, Suchen/Ersetzen, Zeile verschieben/duplizieren, Kommentare, Klammerpaare.
+- [x] tkinter (inkl. ttk, messagebox, filedialog, simpledialog, colorchooser, font) und turtle als echte Fenster; matplotlib-Fenster; PIL.ImageTk.
+- [x] Virtuelles Netzwerk: Python socket/select/selectors, Java Socket/ServerSocket, Browser → Socket-Server; netstat/ss; mehrere Python-/Java-Prozesse gleichzeitig.
+- [x] Java: eigener ClassLoader je Lauf, System.exit abgefangen, Swing/AWT-Fenster.
+- [x] venv auf allen Systemen (bash/zsh/sh, cmd, PowerShell inkl. Ausführungsrichtlinie), pip pro Umgebung, PEP 668 unter Debian/Arch/macOS.
+- [x] .sh/.ps1/.bat auf jedem System (Git Bash/wsl, pwsh, wine cmd).
+- [x] SWI-Prolog (swipl-wasm) im Terminal und als Datenbank im SQL Studio.
+- [x] Smoke-Tests erweitert; Browser-Tests (Headless Chrome) für tkinter, turtle, Sockets, Java, Prolog, IDE und alle Apps auf 9 Systemen.
+- [ ] Python-Threads (Pyodide kennt keine Threads) und Maven-Bibliotheken für Java (Maven Central erlaubt keinen Browser-Download).

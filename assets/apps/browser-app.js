@@ -54,6 +54,20 @@ export class BrowserApp{
       const loc=resolveLocal(url);
       if(loc?.kind==='server'){
         const sv=this.servers.get(loc.port);
+        if(!sv&&this.devices?.net.hasListener(loc.port)){
+          // Selbst programmierter Socket-Server (Python/Java): echte HTTP-Anfrage über das virtuelle Netz.
+          const enc=s=>Array.from(new TextEncoder().encode(s),b=>String.fromCharCode(b)).join('');
+          const payload=body?enc(String(body)):'';
+          const req=`${method||'GET'} ${loc.path||'/'}${loc.query?'?'+loc.query:''} HTTP/1.1\r\nHost: localhost:${loc.port}\r\nUser-Agent: Mozilla/5.0 (DesktopSim)\r\nAccept: text/html,*/*;q=0.8\r\nAccept-Language: de-DE,de;q=0.9\r\nConnection: close\r\n${payload?`Content-Type: application/x-www-form-urlencoded\r\nContent-Length: ${payload.length}\r\n`:''}\r\n${payload}`;
+          setTitle(`localhost:${loc.port}`);show('<p style="font:13px system-ui;margin:16px;color:#666">Warte auf localhost …</p>');
+          const r=await this.devices.net.httpRequest(loc.port,req);
+          if(r.error||!r.response)return page('Fehler',`<h1>Diese Website ist nicht erreichbar</h1><p><b>localhost</b> hat keine Daten gesendet.</p><p class="code">ERR_EMPTY_RESPONSE</p>`,'br-error');
+          const raw=r.response;const split=raw.indexOf('\r\n\r\n');const isHttp=/^HTTP\/\d/.test(raw)&&split>=0;
+          const head=isHttp?raw.slice(0,split):'';const bodyText=new TextDecoder().decode(Uint8Array.from(isHttp?raw.slice(split+4):raw,c=>c.charCodeAt(0)&255));
+          const type=(head.match(/content-type:\s*([^\r\n]+)/i)?.[1]||(/<html|<body|<h1|<p>/i.test(bodyText)?'text/html':'text/plain'));
+          if(/html/i.test(type))show(inline(bodyText,()=>null));else show(`<pre style="white-space:pre-wrap;font:13px monospace;margin:12px">${esc(bodyText)}</pre>`);
+          setTitle(bodyText.match(/<title>([^<]*)<\/title>/i)?.[1]||`localhost:${loc.port}${loc.path||'/'}`);w.base={kind:'server',port:loc.port,path:loc.path};return;
+        }
         if(!sv)return page('Fehler',`<h1>${style==='firefox'?'Fehler: Verbindung fehlgeschlagen':'Diese Website ist nicht erreichbar'}</h1><p><b>localhost</b> hat die Verbindung abgelehnt. Auf Port ${esc(loc.port)} läuft kein Server.</p><p>Starte im Terminal zum Beispiel:</p><pre>${os.startsWith('win')?'python':'python3'} -m http.server ${esc(loc.port)}\nphp -S localhost:${esc(loc.port)}</pre><p class="code">ERR_CONNECTION_REFUSED</p>`,'br-error');
         const res=await this.termEngine.programs.serveLocal(sv,loc.path,loc.query,method,body);
         const dir=sv.cwd+loc.path.replace(/\/[^/]*$/,'');

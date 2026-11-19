@@ -2,10 +2,11 @@
 // 1) Synchrone Eingabe-Brücke: Laufzeit-Worker (Python, C/C++, PHP, JS) blockieren per
 //    synchronem XHR auf /__ds_io__/read, bis das Terminal eine Zeile liefert. Das funktioniert
 //    auf GitHub Pages ohne SharedArrayBuffer/COOP/COEP-Header.
-// 2) Dauerhafter Cache für große, versionierte Laufzeit-Downloads (Pyodide, Clang, PHP, SQLite, JDK-Tools).
+// 2) Dauerhafter Cache für große, versionierte Laufzeit-Downloads (Pyodide, PyPI-Wheels, Clang, PHP, SQLite, SWI-Prolog, JDK-Tools).
 const RUNTIME_CACHE = 'desktopsim-runtimes-v1';
 const CACHE_HOSTS = [
-  /^https:\/\/cdn\.jsdelivr\.net\/(?:pyodide\/v\d|npm\/@yowasp\/|npm\/php-wasm@\d|npm\/@php-wasm\/)/,
+  /^https:\/\/cdn\.jsdelivr\.net\/(?:pyodide\/v\d|npm\/@yowasp\/|npm\/php-wasm@\d|npm\/@php-wasm\/|npm\/swipl-wasm@\d)/,
+  /^https:\/\/files\.pythonhosted\.org\/packages\//,
   /^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/sql\.js\/\d/,
   /^https:\/\/raw\.githubusercontent\.com\/leaningtech\/javafiddle\/[0-9a-f]{40}\//
 ];

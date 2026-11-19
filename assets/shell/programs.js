@@ -1,6 +1,8 @@
 // Programme, die in allen Shells verfügbar sind: echte Sprachlaufzeiten, Paketmanager, Netzwerk & Spielereien.
 import {isWindows,homePath,pathDisplay,joinPath,extName,getOS} from '../vfs.js';
 import {simulateCompiled,simulatePython,compileSource,MiniSQL} from '../runtimes.js';
+import {usesGui} from '../runtime/java.js';
+import {PY_VERSION,PY_SHORT,PIP_VERSION,layout,normName,createVenv,venvScript,venvLauncher,activate as venvActivate,deactivate as venvDeactivate,sitePath,listPackages,writeDist,removeDist,requiredBy,externallyManaged} from './pyenv.js';
 
 export const INSTALLABLE={
   cowsay:{v:'3.03+dfsg2-8',kb:18.6},sl:{v:'5.02-1+b1',kb:13.2},neofetch:{v:'7.1.0-4',kb:84.1,debian:false},fastfetch:{v:'2.40.4+dfsg-1',kb:512},htop:{v:'3.4.0-2',kb:171},
@@ -10,65 +12,145 @@ const ALREADY=new Set(['python3','python3-pip','gcc','g++','build-essential','no
 const C={reset:'\x1b[0m',bold:'\x1b[1m',red:'\x1b[31m',green:'\x1b[32m',yellow:'\x1b[33m',blue:'\x1b[34m',magenta:'\x1b[35m',cyan:'\x1b[36m',gray:'\x1b[90m',white:'\x1b[37m'};
 const sleep=(ms,t)=>new Promise(r=>{const id=setTimeout(r,ms);t?.cancelHooks?.add(()=>{clearTimeout(id);r()})});
 const CLANG_FLAGS=['-fcolor-diagnostics','-fno-exceptions','-D_WASI_EMULATED_SIGNAL','-D_WASI_EMULATED_PROCESS_CLOCKS','-lwasi-emulated-signal','-lwasi-emulated-process-clocks','-Wl,-z,stack-size=8388608'];
-const LANG_NAMES={python:['python','python3','py'],pip:['pip','pip3'],node:['node','nodejs'],npm:['npm','npx'],javac:['javac'],java:['java'],c:['gcc','cc','clang'],cpp:['g++','c++','clang++'],php:['php'],sqlite:['sqlite3','mysql','psql'],dotnet:['dotnet','csc'],git:['git'],curl:['curl','wget'],ssh:['ssh','telnet','scp','ftp'],make:['make','cmake'],editor:['code','ide','gedit','kate','kwrite','mousepad','dtpad','gnome-text-editor'],open:['xdg-open','open','gio'],fun:['fun','matrix','party','byte'],pkg:['apt','apt-get','dpkg','pacman','yay','brew','winget','choco','pkg','pkgutil','snap','flatpak'],fake:['cowsay','sl','figlet','fortune','cmatrix','lolcat'],nslookup:['nslookup','dig','host'],trace:['traceroute'],man:['man']};
+const LANG_NAMES={python:['python','python3','py'],pip:['pip','pip3'],node:['node','nodejs'],npm:['npm','npx'],javac:['javac'],java:['java'],c:['gcc','cc','clang'],cpp:['g++','c++','clang++'],php:['php'],sqlite:['sqlite3','mysql','psql'],dotnet:['dotnet','csc'],git:['git'],curl:['curl','wget'],ssh:['ssh','telnet','scp','ftp'],make:['make','cmake'],editor:['code','ide','gedit','kate','kwrite','mousepad','dtpad','gnome-text-editor'],open:['xdg-open','open','gio'],fun:['fun','matrix','party','byte'],pkg:['apt','apt-get','dpkg','pacman','yay','brew','winget','choco','pkg','pkgutil','snap','flatpak'],fake:['cowsay','sl','figlet','fortune','cmatrix','lolcat'],nslookup:['nslookup','dig','host'],trace:['traceroute'],man:['man'],shells:['bash','sh','wsl','pwsh','wine','cmd','powershell'],prolog:['swipl','prolog'],netstat:['netstat','ss']};
 
 export class Programs{
   constructor(engine){this.engine=engine;this.binaries=new Map();this.javaHashes=new Map()}
   get app(){return this.engine.app}
-  names(t){const win=isWindows(t.os);const out=[];for(const[k,list]of Object.entries(LANG_NAMES)){if(k==='pkg'){out.push(...(win?['winget']:t.os==='debian'?['apt','apt-get','dpkg']:t.os==='arch'?['pacman']:t.os==='macos'?['brew']:['pkg']));continue}if(k==='fake'){out.push(...list.filter(n=>this.isInstalled(n,t)));continue}if(win&&['ssh','make','nslookup','trace'].includes(k)&&k!=='ssh')continue;if(win&&k==='open')continue;if(!win&&k==='man')continue;out.push(...list.filter(n=>!(win&&['python3','cc','c++','gedit','kate','kwrite','mousepad','dtpad','gnome-text-editor','nodejs'].includes(n))))}if(!win&&this.isInstalled('neofetch',t))out.push('neofetch');return out}
+  names(t){const win=isWindows(t.os);const out=[];for(const[k,list]of Object.entries(LANG_NAMES)){if(k==='shells'){out.push(...(win?['bash','sh','wsl','cmd',...(t.os==='winxp'?[]:['powershell']),...(['win10','win11'].includes(t.os)?['pwsh']:[])]:['pwsh','wine']));continue}if(k==='netstat'){out.push(win?'netstat':'ss','netstat');continue}if(k==='pkg'){out.push(...(win?['winget']:t.os==='debian'?['apt','apt-get','dpkg']:t.os==='arch'?['pacman']:t.os==='macos'?['brew']:['pkg']));continue}if(k==='fake'){out.push(...list.filter(n=>this.isInstalled(n,t)));continue}if(win&&['ssh','make','nslookup','trace'].includes(k)&&k!=='ssh')continue;if(win&&k==='open')continue;if(!win&&k==='man')continue;out.push(...list.filter(n=>!(win&&['python3','cc','c++','gedit','kate','kwrite','mousepad','dtpad','gnome-text-editor','nodejs'].includes(n))))}if(!win&&this.isInstalled('neofetch',t))out.push('neofetch');return out}
   has(name,t){return this.names(t).includes(name)||(isWindows(t.os)&&['python3','nslookup'].includes(name))}
   pkgKey(t){return'desktopsim-v3-pkgs-'+t.os}
   installed(t){try{return new Set(JSON.parse(localStorage.getItem(this.pkgKey(t))||'[]'))}catch{return new Set()}}
   isInstalled(name,t){if(t.os==='arch'&&name==='fastfetch')return true;return this.installed(t).has(name)}
   setInstalled(t,name,on=true){const s=this.installed(t);on?s.add(name):s.delete(name);try{localStorage.setItem(this.pkgKey(t),JSON.stringify([...s]))}catch{}}
-  runtimeIO(ctx){return{write:(text,stream)=>stream==='stderr'?ctx.err(text):ctx.out(text),status:s=>ctx.io.status?.(s),image:src=>ctx.io.image?.(src),readLine:async()=>{const l=await ctx.readLine();return l===null?null:l+'\n'}}}
+  runtimeIO(ctx){return{call:async()=>({error:'unsupported'}),write:(text,stream)=>stream==='stderr'?ctx.err(text):ctx.out(text),status:s=>ctx.io.status?.(s),image:src=>ctx.io.image?.(src),readLine:async()=>{const l=await ctx.readLine();return l===null?null:l+'\n'}}}
   async job(ctx,handle){ctx.t.cancelHooks?.add(()=>handle.cancel());const result=await handle.promise;ctx.io.status?.('');return result}
   dirOf(ctx){return ctx.t.cwd}
   apply(ctx,files){if(files&&Object.keys(files).length){this.app.fs.applyChanges(ctx.t.cwd,files);this.app.notifyFiles?.()}}
   async run(name,ctx){
     const k=Object.entries(LANG_NAMES).find(([,l])=>l.includes(name))?.[0]||(name==='python3'?'python':name==='nslookup'?'nslookup':name);
-    const fn={python:this.python,pip:this.pip,node:this.node,npm:this.npm,javac:this.javac,java:this.java,c:this.cc,cpp:this.cc,php:this.php,sqlite:this.sqlite3,dotnet:this.dotnet,git:this.git,curl:this.curl,ssh:this.ssh,make:this.make,editor:this.editorProgram,open:this.open,fun:this.fun,pkg:this.packageManager,fake:this.toy,nslookup:this.nslookup,trace:this.traceroute,man:this.man}[k];
+    const fn={shells:this.shellProgram,prolog:this.swipl,netstat:this.netstat,python:this.python,pip:this.pip,node:this.node,npm:this.npm,javac:this.javac,java:this.java,c:this.cc,cpp:this.cc,php:this.php,sqlite:this.sqlite3,dotnet:this.dotnet,git:this.git,curl:this.curl,ssh:this.ssh,make:this.make,editor:this.editorProgram,open:this.open,fun:this.fun,pkg:this.packageManager,fake:this.toy,nslookup:this.nslookup,trace:this.traceroute,man:this.man}[k];
     if(!fn)return this.engine.notFound(name,ctx.t,ctx.io);
     return fn.call(this,ctx);
   }
 
   // ---------- Python ----------
-  async python(ctx){
-    const args=ctx.args,rt=this.app.runtimes;
-    if(args[0]==='--version'||args[0]==='-V'){ctx.out('Python 3.14.2\n');return 0}
-    if(args[0]==='-m'){const mod=args[1];if(mod==='http.server')return this.startServer(args[2]||'8000',ctx,'python');if(mod==='pip')return this.pip({...ctx,args:args.slice(2)});if(mod==='venv'){const dir=args[2]||'.venv';ctx.fs.mkdir(joinPath(ctx.fs.normalize(dir,ctx.t.cwd),isWindows(ctx.os)?'Scripts':'bin'),null,true);ctx.fs.write(joinPath(ctx.fs.normalize(dir,ctx.t.cwd),'pyvenv.cfg'),'home = /usr/bin\ninclude-system-site-packages = false\nversion = 3.14.2\n');ctx.fs.write(joinPath(ctx.fs.normalize(dir,ctx.t.cwd),isWindows(ctx.os)?'Scripts/activate.bat':'bin/activate'),'# virtuelle Umgebung (DesktopSim)\n');this.app.notifyFiles?.();return 0}
-      const src=`import runpy, sys\nsys.argv=${JSON.stringify([mod,...args.slice(2)])}\nrunpy.run_module(${JSON.stringify(mod)}, run_name='__main__')`;return this.runPython(ctx,{source:src,entry:'__main__.py',args:args.slice(2)})}
-    if(args[0]==='-c')return this.runPython(ctx,{source:args[1]||'',entry:'<string>',args:args.slice(2)});
+  pyEnv(ctx,venv=undefined){
+    const dir=venv===undefined?ctx.t.venv?.path:venv;const os=ctx.os;
+    const pkgs=listPackages(ctx.fs,os,dir||null).map(p=>p.name).filter(n=>normName(n)!=='pip');
+    return{venv:dir?pathDisplay(os,dir):null,packages:pkgs,windows:isWindows(os),hostname:this.app.devices?.hostname()||'desktopsim'};
+  }
+  pyBin(ctx,tool='python'){const v=ctx.t.venv?.path;if(v)return pathDisplay(ctx.os,joinPath(joinPath(v,layout(ctx.os).bin),tool+(isWindows(ctx.os)?'.exe':'')));return isWindows(ctx.os)?`C:\\Program Files\\Python314\\${tool}.exe`:ctx.os==='macos'?`/opt/homebrew/bin/${tool}3`:`/usr/bin/${tool}3`}
+  async python(ctx,venv=undefined){
+    let args=[...ctx.args];const rt=this.app.runtimes;
+    if(ctx.name==='py'&&/^-\d/.test(args[0]||''))args.shift();
+    while(['-u','-B','-q','-E','-s','-I','-O'].includes(args[0]))args.shift();
+    if(args[0]==='--version'||args[0]==='-V'){ctx.out(`Python ${PY_VERSION}\n`);return 0}
+    if(args[0]==='-m'){const mod=args[1];
+      if(mod==='http.server')return this.startServer(args[2]||'8000',ctx,'python');
+      if(mod==='pip')return this.pip({...ctx,args:args.slice(2),name:'pip'},venv);
+      if(mod==='venv')return this.makeVenv(ctx,args.slice(2));
+      if(mod==='ensurepip'){ctx.out(`Looking in links: /tmp/tmp${Math.random().toString(36).slice(2,8)}\nRequirement already satisfied: pip in ${pathDisplay(ctx.os,sitePath(ctx.os,ctx.t.venv?.path))} (${PIP_VERSION})\n`);return 0}
+      const src=`import runpy, sys\nsys.argv=${JSON.stringify([mod,...args.slice(2)])}\nrunpy.run_module(${JSON.stringify(mod)}, run_name='__main__', alter_sys=True)`;return this.runPython(ctx,{source:src,entry:'__ds_main__.py',args:args.slice(2),venv})}
+    if(args[0]==='-c')return this.runPython(ctx,{source:args[1]||'',entry:'<string>',args:args.slice(2),venv});
     if(!args.length||args[0]==='-i'&&args.length===1){
       if(!rt){ctx.err('Python-REPL benötigt die Browser-Laufzeit.\n');return 1}
-      const banner=`Python 3.14.2 (main, Pyodide/WebAssembly) [Clang 20] on ${isWindows(ctx.os)?'win32':ctx.os==='macos'?'darwin':'linux'}\\nType "help", "copyright", "credits" or "license" for more information.`;
-      return this.runPython(ctx,{source:`import code, sys\nsys.ps1 = '>>> '\nsys.ps2 = '... '\ntry:\n    code.interact(banner="${banner}", exitmsg='', local={'__name__':'__main__'})\nexcept SystemExit:\n    pass\n`,entry:'<stdin>'});
+      const banner=`Python ${PY_VERSION} (main, Pyodide/WebAssembly) [Clang 23] on ${isWindows(ctx.os)?'win32':ctx.os==='macos'?'darwin':'linux'}\\nType "help", "copyright", "credits" or "license" for more information.`;
+      return this.runPython(ctx,{source:`import code, sys\nsys.ps1 = '>>> '\nsys.ps2 = '... '\ntry:\n    code.interact(banner="${banner}", exitmsg='', local={'__name__':'__main__'})\nexcept SystemExit:\n    pass\n`,entry:'__ds_repl__.py',venv});
     }
-    const file=args[0];let source;try{source=ctx.fs.read(file,ctx.t.cwd)}catch{ctx.err(isWindows(ctx.os)?`${ctx.name}: can't open file '${pathDisplay(ctx.os,ctx.fs.normalize(file,ctx.t.cwd))}': [Errno 2] No such file or directory\n`:`${ctx.name}: can't open file '${ctx.fs.normalize(file,ctx.t.cwd)}': [Errno 2] No such file or directory\n`);return 2}
+    const file=args[0];let source;try{source=ctx.fs.read(file,ctx.t.cwd)}catch{ctx.err(`${ctx.name}: can't open file '${pathDisplay(ctx.os,ctx.fs.normalize(file,ctx.t.cwd))}': [Errno 2] No such file or directory\n`);return 2}
     const rel=ctx.fs.normalize(file,ctx.t.cwd);const entry=rel.startsWith(ctx.t.cwd+'/')?rel.slice(ctx.t.cwd.length+1):rel.split('/').pop();
-    return this.runPython(ctx,{source,entry,args:args.slice(1)});
+    return this.runPython(ctx,{source,entry,args:args.slice(1),venv});
   }
-  async runPython(ctx,{source,entry,args=[]}){
+  async runPython(ctx,{source,entry,args=[],venv=undefined}){
     const rt=this.app.runtimes;
     if(!rt){const demo=simulatePython(source);ctx.out(demo.output+'\n');return 0}
     const files=ctx.fs.snapshot(ctx.t.cwd);
-    const r=await this.job(ctx,rt.runPython({source,entry,files,args,stdin:ctx.stdin??''},this.runtimeIO(ctx)));
+    const session=this.app.devices?.session({label:'python',cwd:ctx.t.cwd});
+    const io={...this.runtimeIO(ctx),gui:ops=>session?.ops(ops),call:(op,a)=>session?session.call(op,a):{error:'unsupported'}};
+    let r;try{r=await this.job(ctx,rt.runPython({source,entry,files,args,stdin:ctx.stdin??'',env:this.pyEnv(ctx,venv)},io))}finally{session?.close()}
     this.apply(ctx,r.files);
     if(r.fatal&&!r.cancelled){const demo=simulatePython(source);ctx.err(`${C.yellow}Python (Pyodide) konnte nicht geladen werden – vereinfachte Offline-Demo:${C.reset}\n`);ctx.out(demo.output+'\n');return 1}
     if(r.cancelled){ctx.err('\nKeyboardInterrupt\n');return 130}
     return r.code;
   }
-  async pip(ctx){
-    const[sub,...rest]=ctx.args;
-    if(!sub||sub==='--version'||sub==='-V'){ctx.out(`pip 25.2 from /lib/python3.14/site-packages/pip (python 3.14)\n`);return 0}
-    if(sub==='list'||sub==='freeze'){const pkgs=[['micropip','0.10.1'],['packaging','25.0'],['pip','25.2'],...(this.pipInstalled||[]).map(p=>[p,'latest'])];ctx.out(sub==='freeze'?pkgs.map(([n,v])=>`${n}==${v}`).join('\n')+'\n':'Package    Version\n---------- -------\n'+pkgs.map(([n,v])=>n.padEnd(10)+' '+v).join('\n')+'\n');return 0}
-    if(sub!=='install'){ctx.err(`ERROR: unknown command "${sub}"\n`);return 1}
-    const pkgs=rest.filter(a=>!a.startsWith('-'));if(!pkgs.length){ctx.err('ERROR: You must give at least one requirement to install (see "pip help install")\n');return 1}
-    if(!this.app.runtimes){ctx.out(`Collecting ${pkgs.join(' ')}\nSuccessfully installed ${pkgs.join(' ')}\n`);return 0}
-    for(const p of pkgs)ctx.out(`Collecting ${p}\n`);
-    const r=await this.job(ctx,this.app.runtimes.pip(pkgs,this.runtimeIO(ctx)));
-    (this.pipInstalled||=[]).push(...pkgs);
-    ctx.out(`${C.gray}Hinweis: Pakete stammen aus dem Pyodide-Paketindex bzw. PyPI (reine Python-Wheels) und gelten für diese Sitzung.${C.reset}\n`);return r.code;
+  async makeVenv(ctx,args){
+    const opts={prompt:null,systemSite:false,withoutPip:false,clear:false};const dirs=[];
+    for(let i=0;i<args.length;i++){const a=args[i];if(a==='--prompt')opts.prompt=args[++i];else if(a.startsWith('--prompt='))opts.prompt=a.slice(9);else if(a==='--system-site-packages')opts.systemSite=true;else if(a==='--without-pip')opts.withoutPip=true;else if(a==='--clear')opts.clear=true;else if(a==='-h'||a==='--help'){ctx.out('usage: venv [-h] [--system-site-packages] [--symlinks | --copies] [--clear]\n            [--upgrade] [--without-pip] [--prompt PROMPT] [--upgrade-deps]\n            [--without-scm-ignore-files]\n            ENV_DIR [ENV_DIR ...]\n\nCreates virtual Python environments in one or more target directories.\n');return 0}else if(!a.startsWith('-'))dirs.push(a)}
+    if(!dirs.length){ctx.err('usage: venv [-h] [--system-site-packages] [--symlinks | --copies] [--clear]\n            [--upgrade] [--without-pip] [--prompt PROMPT] [--upgrade-deps]\n            ENV_DIR [ENV_DIR ...]\nvenv: error: the following arguments are required: ENV_DIR\n');return 2}
+    for(const d of dirs){const dir=ctx.fs.normalize(d,ctx.t.cwd);if(ctx.fs.exists(dir)&&!ctx.fs.isDir(dir)){ctx.err(`Error: [Errno 17] File exists: '${pathDisplay(ctx.os,dir)}'\n`);return 1}
+      ctx.io.status?.('Virtuelle Umgebung wird erstellt …');await sleep(250,ctx.t);try{createVenv(ctx.fs,dir,ctx.os,opts)}catch(e){ctx.err(`Error: ${e.message}\n`);return 1}}
+    ctx.io.status?.('');this.app.notifyFiles?.();return 0;
+  }
+  pipLocation(ctx,venv){return pathDisplay(ctx.os,sitePath(ctx.os,venv))}
+  async pip(ctx,venv=undefined){
+    const env=venv===undefined?ctx.t.venv?.path||null:venv;const os=ctx.os;
+    const args=[...ctx.args];const sub=args.shift();const flags=new Set(args.filter(a=>a.startsWith('-')));
+    const tool=ctx.name&&/^pip/.test(ctx.name)?ctx.name:'pip';
+    if(!sub||sub==='help'||sub==='-h'||sub==='--help'){ctx.out(`\nUsage:   \n  ${tool} <command> [options]\n\nCommands:\n  install                     Install packages.\n  uninstall                   Uninstall packages.\n  freeze                      Output installed packages in requirements format.\n  list                        List installed packages.\n  show                        Show information about installed packages.\n  help                        Show help for commands.\n\nGeneral Options:\n  -h, --help                  Show help.\n  -V, --version               Show version and exit.\n\n${C.gray}DesktopSim: Pakete kommen aus dem Pyodide-Index (numpy, pandas, matplotlib, scipy, sympy, scikit-learn …) oder als reine Python-Wheels von PyPI.${C.reset}\n`);return sub?0:1}
+    if(sub==='--version'||sub==='-V'){ctx.out(`pip ${PIP_VERSION} from ${pathDisplay(os,joinPath(sitePath(os,env),'pip'))} (python ${PY_SHORT})\n`);return 0}
+    const pkgs=listPackages(ctx.fs,os,env);
+    const sysPkgs=env?[]:[{name:'pip',version:PIP_VERSION}];
+    if(sub==='list'){const all=[...sysPkgs,...pkgs].sort((a,b)=>a.name.localeCompare(b.name,'en',{sensitivity:'base'}));if(flags.has('--format=freeze')){ctx.out(all.map(p=>`${p.name}==${p.version}`).join('\n')+'\n');return 0}const w=Math.max(7,...all.map(p=>p.name.length)),v=Math.max(7,...all.map(p=>String(p.version).length));ctx.out(`${'Package'.padEnd(w)} ${'Version'.padEnd(v)}\n${'-'.repeat(w)} ${'-'.repeat(v)}\n`+all.map(p=>`${p.name.padEnd(w)} ${p.version}`).join('\n')+'\n');return 0}
+    if(sub==='freeze'){ctx.out(pkgs.filter(p=>!['pip','setuptools','wheel'].includes(normName(p.name))).map(p=>`${p.name}==${p.version}`).join('\n')+(pkgs.length>1||!env?'\n':''));return 0}
+    if(sub==='show'){const names=args.filter(a=>!a.startsWith('-'));if(!names.length){ctx.err('ERROR: Please provide a package name or names.\n');return 1}let code=0;const parts=[];for(const n of names){const p=[...sysPkgs,...pkgs].find(x=>normName(x.name)===normName(n));if(!p){code=1;continue}parts.push(`Name: ${p.name}\nVersion: ${p.version}\nSummary: ${p.summary||''}\nHome-page: ${p.homepage||''}\nAuthor: ${p.author||''}\nAuthor-email: \nLicense: ${p.license||''}\nLocation: ${this.pipLocation(ctx,env)}\nRequires: ${(p.requires||[]).join(', ')}\nRequired-by: ${requiredBy(ctx.fs,os,env,p.name).join(', ')}`)}if(parts.length)ctx.out(parts.join('\n---\n')+'\n');if(code)ctx.err(`WARNING: Package(s) not found: ${names.filter(n=>![...sysPkgs,...pkgs].some(x=>normName(x.name)===normName(n))).join(', ')}\n`);return code}
+    if(sub==='uninstall'){const names=args.filter(a=>!a.startsWith('-'));const yes=flags.has('-y')||flags.has('--yes');if(!names.length){ctx.err('ERROR: You must give at least one requirement to uninstall (see "pip help uninstall")\n');return 1}
+      for(const n of names){const p=pkgs.find(x=>normName(x.name)===normName(n));if(!p){ctx.err(`WARNING: Skipping ${n} as it is not installed.\n`);continue}const loc=this.pipLocation(ctx,env);const sep=isWindows(os)?'\\':'/';ctx.out(`Found existing installation: ${p.name} ${p.version}\nUninstalling ${p.name}-${p.version}:\n  Would remove:\n    ${loc}${sep}${p.name.replace(/-/g,'_')}-${p.version}.dist-info${sep}*\n    ${loc}${sep}${p.name.toLowerCase().replace(/-/g,'_')}${sep}*\n`);
+        if(!yes){ctx.out('Proceed (Y/n)? ');const a=await ctx.readLine();ctx.out('\n');if(a===null||/^n/i.test(a.trim()))continue}removeDist(ctx.fs,env,os,p.name);ctx.out(`  Successfully uninstalled ${p.name}-${p.version}\n`)}
+      this.app.notifyFiles?.();return 0}
+    if(sub!=='install'&&sub!=='download'){ctx.err(`ERROR: unknown command "${sub}"\n`);return 1}
+    // install
+    let specs=[];for(let i=0;i<args.length;i++){const a=args[i];if(a==='-r'||a==='--requirement'){const f=args[++i];let text;try{text=ctx.fs.read(f,ctx.t.cwd)}catch{ctx.err(`ERROR: Could not open requirements file: [Errno 2] No such file or directory: '${f}'\n`);return 1}specs.push(...text.split(/\r?\n/).map(l=>l.replace(/#.*$/,'').trim()).filter(l=>l&&!l.startsWith('-')))}else if(a.startsWith('-r')&&a.length>2){i--;args[i+1]=a.slice(2);args.splice(i+1,0,'-r')}else if(!a.startsWith('-'))specs.push(a)}
+    if(!specs.length){ctx.err('ERROR: You must give at least one requirement to install (see "pip help install")\n');return 1}
+    if(!env&&!flags.has('--break-system-packages')){const em=externallyManaged(os);if(em){ctx.err(em);ctx.err(`${C.gray}Tipp (DesktopSim): erst eine virtuelle Umgebung anlegen und aktivieren:\n  python3 -m venv .venv\n  source .venv/bin/activate\n  pip install ${specs.join(' ')}${C.reset}\n`);return 1}}
+    if(!env&&isWindows(os))ctx.out('Defaulting to user installation because normal site-packages is not writeable\n');
+    const upgrade=flags.has('-U')||flags.has('--upgrade')||flags.has('--force-reinstall');
+    const todo=[];for(const spec of specs){const name=spec.replace(/[<>=!~ ;\[].*$/,'');const have=pkgs.find(p=>normName(p.name)===normName(name));if(have&&!upgrade&&!/[<>=!~]/.test(spec)){ctx.out(`Requirement already satisfied: ${name} in ${this.pipLocation(ctx,env)} (${have.version})\n`);continue}todo.push(spec)}
+    if(!todo.length)return 0;
+    if(!this.app.runtimes){for(const p of todo)ctx.out(`Collecting ${p}\n`);ctx.out(`Successfully installed ${todo.join(' ')}\n`);return 0}
+    for(const p of todo)ctx.out(`Collecting ${p}\n`);
+    const r=await this.job(ctx,this.app.runtimes.pip(todo,this.runtimeIO(ctx),this.pyEnv(ctx,env)));
+    if(r.cancelled){ctx.err('ERROR: Operation cancelled by user\n');return 1}
+    const installed=(r.installed||[]).filter(p=>normName(p.name)!=='micropip');
+    const fresh=installed.filter(p=>{const have=pkgs.find(x=>normName(x.name)===normName(p.name));return!have||have.version!==p.version||p.requested&&upgrade});
+    for(const p of installed.filter(p=>!p.requested)){const parent=installed.find(x=>(x.requires||[]).some(q=>normName(q)===normName(p.name)));const have=pkgs.find(x=>normName(x.name)===normName(p.name));if(have)ctx.out(`Requirement already satisfied: ${have.name} in ${this.pipLocation(ctx,env)} (from ${parent?.name||todo[0]}) (${have.version})\n`);else ctx.out(`Collecting ${p.name} (from ${parent?.name||todo[0]})\n`)}
+    if(fresh.length){const order=[...fresh.filter(p=>!p.requested),...fresh.filter(p=>p.requested)];ctx.out(`Installing collected packages: ${order.map(p=>p.name).join(', ')}\n`);for(const p of fresh)writeDist(ctx.fs,env,os,p);ctx.out(`Successfully installed ${order.map(p=>`${p.name}-${p.version}`).sort((a,b)=>a.localeCompare(b,'en',{sensitivity:'base'})).join(' ')}\n`)}
+    this.app.notifyFiles?.();
+    return r.code;
+  }
+
+  // ---------- SWI-Prolog ----------
+  async swipl(ctx){
+    const args=[...ctx.args];const consult=[],goals=[];let quiet=false,top=null;
+    for(let i=0;i<args.length;i++){const a=args[i];
+      if(a==='--version'||a==='-v'){goals.push("current_prolog_flag(version,V),Ma is V//10000,Mi is V//100 mod 100,P is V mod 100,format('SWI-Prolog version ~w.~w.~w for wasm32-emscripten~n',[Ma,Mi,P])");top='halt';continue}
+      if(a==='-h'||a==='--help'){ctx.out('swipl: Usage:\n    1) swipl [options] prolog-file ... [-- arg ...]\n    2) swipl [options] [-o executable] -c prolog-file ...\n\nOptions:\n    -g goal                  Run goal (may be repeated)\n    -t toplevel              Toplevel goal\n    -q                       Operate quietly\n    -s file                  Script source file\n    --version                Print version\n');return 0}
+      if(a==='-q'||a==='--quiet'){quiet=true;continue}
+      if(a==='-g'){goals.push(args[++i]||'true');continue}
+      if(a==='-t'){top=args[++i]||'halt';continue}
+      if(a==='-s'||a==='-l'||a==='-f'){consult.push(args[++i]);continue}
+      if(a==='--')break;
+      if(!a.startsWith('-'))consult.push(a);
+    }
+    for(const f of consult){if(f&&!ctx.fs.exists(f,ctx.t.cwd)&&!ctx.fs.exists(f+'.pl',ctx.t.cwd)){ctx.err(`swipl: Usage: script file ${f} does not exist\n`);return 1}}
+    const rt=this.app.runtimes;if(!rt){ctx.err('SWI-Prolog benötigt die Browser-Laufzeit.\n');return 1}
+    const files=ctx.fs.snapshot(ctx.t.cwd);
+    const mode=top==='halt'?'goals':'toplevel';
+    const r=await this.job(ctx,rt.runProlog({files,consult:consult.map(f=>ctx.fs.exists(f,ctx.t.cwd)?f:f+'.pl'),goals,mode,banner:mode==='toplevel'&&!quiet&&!consult.length,stdin:ctx.stdin??''},this.runtimeIO(ctx)));
+    if(mode==='toplevel'&&goals.length){/* -g ohne -t halt: Ziele laufen vor dem Toplevel */}
+    this.apply(ctx,r.files);
+    if(r.cancelled){ctx.err('\n% Execution Aborted\n');return 130}
+    if(r.fatal){ctx.err(`${C.yellow}SWI-Prolog konnte nicht geladen werden (Netzwerk/CDN?).${C.reset}\n`);return 1}
+    return r.code;
+  }
+  // ---------- Netzwerk-Übersicht ----------
+  async netstat(ctx){
+    const net=this.app.devices?.net;const ports=net?net.ports():[];const win=isWindows(ctx.os);
+    const servers=[...(this.app.servers?.keys?.()||[])].map(p=>({proto:'tcp',port:+p,host:'0.0.0.0',state:'LISTEN',label:'http'}));
+    const all=[...servers,...ports];
+    if(ctx.name==='ss'){ctx.out('Netid State      Recv-Q Send-Q Local Address:Port   Peer Address:Port Process\n'+all.map(p=>`${p.proto.padEnd(5)} ${(p.state==='LISTEN'?'LISTEN':p.state==='ESTABLISHED'?'ESTAB':'UNCONN').padEnd(10)} 0      ${p.state==='LISTEN'?'128':'0'.padEnd(3)}    ${(p.host+':'+p.port).padEnd(20)} ${(p.remote?p.remote.join(':'):'0.0.0.0:*').padEnd(17)} ${p.label?`users:(("${p.label}"))`:''}`).join('\n')+'\n');return 0}
+    if(win){ctx.out('\nAktive Verbindungen\n\n  Proto  Lokale Adresse         Remoteadresse          Status\n'+all.map(p=>`  ${p.proto.toUpperCase().padEnd(6)} ${(p.host+':'+p.port).padEnd(22)} ${(p.remote?p.remote.join(':'):'0.0.0.0:0').padEnd(22)} ${p.state==='LISTEN'?'ABHÖREN':p.state==='ESTABLISHED'?'HERGESTELLT':''}`).join('\n')+'\n');return 0}
+    ctx.out('Aktive Internetverbindungen (Server und hergestellte)\nProto Recv-Q Send-Q Local Address           Foreign Address         State\n'+all.map(p=>`${p.proto.padEnd(5)} ${'0'.padStart(6)} ${'0'.padStart(6)} ${(p.host+':'+p.port).padEnd(23)} ${(p.remote?p.remote.join(':'):'0.0.0.0:*').padEnd(23)} ${p.state}`).join('\n')+'\n');return 0;
   }
 
   // ---------- JavaScript / Node ----------
@@ -169,7 +251,13 @@ export class Programs{
     if(!rt){const r=simulateCompiled('java',node?.content||'');ctx.out(r.output+'\n');return 0}
     // Falls der zuletzt kompilierte Stand nicht zur .class-Datei passt (z. B. anderer Ordner), still neu übersetzen.
     if(node&&!fresh&&this.javaHashes.get(cls.split('.').pop())!==hash(node.content)){const r=await this.job(ctx,rt.compileJava({files:{[node.srcName||cls+'.java']:node.content}},{...this.runtimeIO(ctx),write:()=>{}}));if(r.code!==0){ctx.err(`Fehler: Klasse ${cls} konnte nicht geladen werden – bitte neu kompilieren.\n`);return 1}this.javaHashes.set(cls.split('.').pop(),hash(node.content))}
-    const r=await this.job(ctx,rt.runJava({className:cls,args},this.runtimeIO(ctx)));
+    // Swing/AWT? Dann bekommt das Programm ein eigenes Fenster für die Java-Oberfläche.
+    let src=node?.content||'';try{if(!src)src=ctx.fs.read(cls.split('.').pop()+'.java',ctx.t.cwd)}catch{}
+    let gui=usesGui(src);if(!gui)try{gui=ctx.fs.list('.',ctx.t.cwd).some(e=>e.type==='file'&&/\.java$/.test(e.name)&&usesGui(ctx.fs.read(e.name,ctx.t.cwd))&&new RegExp(`\\b${e.name.replace(/\.java$/,'')}\\b`).test(src))}catch{}
+    const session=this.app.devices?.session({label:'java',cwd:ctx.t.cwd});let win=null;
+    const guiHost=()=>{win=this.app.makeWindow('javaapp',`Java – ${cls.split('.').pop()}`,'ide',{width:820,height:600});win.content.className='window-content java-gui';win.beforeClose=()=>{this.engine.cancel(ctx.t);win=null;return true};return win.content};
+    const io={...this.runtimeIO(ctx),windows:isWindows(ctx.os),call:(op,a)=>session?session.call(op,a):Promise.resolve({error:'unsupported'})};
+    let r;try{r=await this.job(ctx,rt.runJava({className:cls,args,gui,guiHost},io))}finally{session?.close();if(win)this.app.closeWindowById(win.id)}
     if(r.cancelled){ctx.err('\n^C (Java-Ausgabe abgekoppelt – die JVM läuft im Hintergrund weiter)\n');return 130}
     return r.code;
   }
@@ -239,18 +327,22 @@ export class Programs{
 
   // ---------- Dateien ausführen ----------
   async runFile(path,ctx){
-    const fs=ctx.fs,t=ctx.t,win=isWindows(t.os);
+    const fs=ctx.fs,t=ctx.t,win=(isWindows(t.os)&&!['bash','sh','zsh'].includes(t.shell))||t.shell==='cmd';
     if(path.startsWith('missing:')){ctx.err(`${t.shell==='zsh'?'zsh: no such file or directory: '+ctx.name:`${t.shell}: ${ctx.name}: Datei oder Verzeichnis nicht gefunden`}\n`);return 127}
     const node=fs.locate(path);
     if(node.type==='dir'){ctx.err(`${t.shell}: ${ctx.name}: Ist ein Verzeichnis\n`);return 126}
-    if(!win&&!(node.mode&0o111)){ctx.err(`${t.shell==='zsh'?`zsh: permission denied: ${ctx.name}`:`${t.shell}: ${ctx.name}: Keine Berechtigung`}\n${C.gray}Tipp: Ausführbar machen mit »chmod +x ${ctx.name.replace(/^\.\//,'')}«.${C.reset}\n`);return 126}
+    const launcher=venvLauncher(fs,path);
+    if(launcher)return launcher.tool==='pip'?this.pip({...ctx,name:'pip'},launcher.venv):this.python({...ctx,name:'python'},launcher.venv);
+    const vs=venvScript(fs,path);
+    if(vs&&(t.shell==='cmd'||t.shell==='powershell'))return this.venvScriptRun(ctx,vs,path);
+    if(!win&&!isWindows(t.os)&&!(node.mode&0o111)){ctx.err(`${t.shell==='zsh'?`zsh: permission denied: ${ctx.name}`:`${t.shell}: ${ctx.name}: Keine Berechtigung`}\n${C.gray}Tipp: Ausführbar machen mit »chmod +x ${ctx.name.replace(/^\.\//,'')}«.${C.reset}\n`);return 126}
     if(node.enc==='wasm')return this.runWasm(ctx,path,ctx.args);
     if(node.enc==='sim'){const r=simulateCompiled(node.lang,node.content);ctx.out(r.output+'\n');return 0}
     if(node.enc==='exe'){const n=path.split('/').pop().toLowerCase().replace(/\.exe$/,'');const map={notepad:()=>this.app.openEditor?.(),calc:()=>this.app.openCalculator?.(),explorer:()=>this.app.openFiles?.(),taskmgr:()=>this.app.openTaskManager?.(),cmd:()=>this.app.openTerminal?.(),winver:()=>this.app.openAbout?.()};if(map[n])map[n]();else if(this.engine.cmd[n])return this.engine.cmd[n].call(this.engine,ctx);return 0}
     const ext=extName(path);const content=node.content;
     if(win){
       if(ext==='bat'||ext==='cmd')return this.runBatch(ctx,content,path);
-      if(ext==='ps1'){const policy=this.app.getSetting?.('psPolicy')||'Restricted';if(t.shell!=='powershell'){return this.engine.runSource(content,{...t},ctx.io)}if(/restricted|allsigned/i.test(policy)){ctx.err(`${C.red}${ctx.name} : Die Datei "${pathDisplay(t.os,path)}" kann nicht geladen werden, da die Ausführung von Skripts auf diesem System deaktiviert ist. Weitere Informationen finden Sie unter "about_Execution_Policies" (https:/go.microsoft.com/fwlink/?LinkID=135170).\nIn Zeile:1 Zeichen:1\n+ ${ctx.name}\n+ ${'~'.repeat(ctx.name.length)}\n    + CategoryInfo          : Sicherheitsfehler: (:) [], PSSecurityException\n    + FullyQualifiedErrorId : UnauthorizedAccess${C.reset}\n${C.gray}Tipp: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned${C.reset}\n`);return 1}const saved=t.args;t.args=ctx.args;try{return await this.engine.runSource(content,t,ctx.io)}finally{t.args=saved}}
+      if(ext==='ps1'){const policy=this.app.getSetting?.('psPolicy')||'Restricted';if(t.shell!=='powershell'){return this.engine.runSource(content,{...t},ctx.io)}if(!t.psBypass&&/restricted|allsigned/i.test(policy)){ctx.err(`${C.red}${ctx.name} : Die Datei "${pathDisplay(t.os,path)}" kann nicht geladen werden, da die Ausführung von Skripts auf diesem System deaktiviert ist. Weitere Informationen finden Sie unter "about_Execution_Policies" (https:/go.microsoft.com/fwlink/?LinkID=135170).\nIn Zeile:1 Zeichen:1\n+ ${ctx.name}\n+ ${'~'.repeat(ctx.name.length)}\n    + CategoryInfo          : Sicherheitsfehler: (:) [], PSSecurityException\n    + FullyQualifiedErrorId : UnauthorizedAccess${C.reset}\n${C.gray}Tipp: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned${C.reset}\n`);return 1}const saved=t.args;t.args=ctx.args;try{return await this.engine.runSource(content,t,ctx.io)}finally{t.args=saved}}
       if(ext==='py')return this.python({...ctx,args:[path,...ctx.args],name:'python'});
       if(ext==='js')return this.node({...ctx,args:[path,...ctx.args],name:'node'});
       return this.open({...ctx,args:[path]});
@@ -261,6 +353,15 @@ export class Programs{
       if(prog==='node')return this.node({...ctx,args:[path,...ctx.args],name:'node'});
       if(prog==='php')return this.php({...ctx,args:[path,...ctx.args],name:'php'});}
     return this.runScript(ctx,content,path);
+  }
+  psPolicyBlocked(ctx,path){const policy=this.app.getSetting?.('psPolicy')||'Restricted';if(ctx.t.psBypass||!isWindows(ctx.os)||!/restricted|allsigned/i.test(policy))return false;ctx.err(`${C.red}${ctx.name} : Die Datei "${pathDisplay(ctx.os,path)}" kann nicht geladen werden, da die Ausführung von Skripts auf diesem System deaktiviert ist. Weitere Informationen finden Sie unter "about_Execution_Policies" (https:/go.microsoft.com/fwlink/?LinkID=135170).\nIn Zeile:1 Zeichen:1\n+ ${ctx.name}\n+ ${'~'.repeat(ctx.name.length)}\n    + CategoryInfo          : Sicherheitsfehler: (:) [], PSSecurityException\n    + FullyQualifiedErrorId : UnauthorizedAccess${C.reset}\n${C.gray}Tipp: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned${C.reset}\n`);return true}
+  /** Aktivierungsskripte virtueller Umgebungen (source bin/activate, Scripts\\activate.bat, Activate.ps1). */
+  venvScriptRun(ctx,vs,path){
+    const t=ctx.t;
+    if(vs.kind==='deactivate'){if(t.venv)venvDeactivate(t);return 0}
+    if(t.shell==='powershell'){const ps1=path.replace(/[^/]+$/,'Activate.ps1');if(this.psPolicyBlocked({...ctx,name:ctx.name.replace(/activate(\.bat)?$/i,'Activate.ps1')},ps1))return 1}
+    if(t.shell==='powershell'&&/activate\.fish|activate\.csh/i.test(vs.script))return 1;
+    venvActivate(t,ctx.fs,vs.venv);return 0;
   }
   async runScript(ctx,content,path){
     const t=ctx.t;const saved={vars:{...t.vars},cwd:t.cwd,args:t.args,scriptName:t.scriptName,prevCwd:t.prevCwd};
@@ -294,7 +395,33 @@ export class Programs{
   }
 
   // ---------- Shells ----------
+  /** bash/sh/wsl unter Windows (Git Bash), pwsh überall, wine cmd unter Linux/macOS. */
+  async shellProgram(ctx){
+    const name=ctx.name.toLowerCase().replace(/\.exe$/,''),t=ctx.t,win=isWindows(ctx.os);
+    if(name==='cmd'||name==='powershell')return this.switchShell(ctx,name);
+    if(name==='pwsh')return this.switchShell(ctx,'powershell');
+    if(name==='wine'){const a=ctx.args;if(!a.length){ctx.err('Usage: wine PROGRAM [ARGUMENTS...]   Run the specified program\n       wine --help                   Display this help and exit\n       wine --version                Output version information and exit\n');return 1}if(a[0]==='--version'){ctx.out('wine-10.0\n');return 0}
+      const prog=a[0].toLowerCase();if(prog==='cmd'||prog==='cmd.exe')return this.switchShell({...ctx,args:a.slice(1),name:'cmd'},'cmd');
+      if(/\.(bat|cmd)$/i.test(prog)){let content;try{content=ctx.fs.read(a[0],t.cwd)}catch{ctx.err(`wine: cannot find L"${a[0]}"\n`);return 1}return this.withShell(t,'cmd',()=>this.runBatch({...ctx,args:a.slice(1)},content,ctx.fs.normalize(a[0],t.cwd)))}
+      ctx.err(`wine: could not load L"${a[0]}": Modul nicht gefunden.\n${C.gray}DesktopSim: wine kann hier Batch-Dateien (.bat/.cmd) und cmd ausführen.${C.reset}\n`);return 1}
+    // bash / sh / wsl unter Windows
+    let args=[...ctx.args];if(name==='wsl'){if(args[0]==='-e'||args[0]==='--exec'||args[0]==='--')args.shift();if(args[0]==='--version'||args[0]==='-v'){ctx.out('WSL-Version: 2.6.1.0\nKernelversion: 6.6.87.2-1\n');return 0}if(args[0]==='-l'||args[0]==='--list'){ctx.out('Windows-Subsystem für Linux-Distributionen:\nDebian (Standard)\n');return 0}if(args[0]==='bash'||args[0]==='sh')args.shift();else if(args.length&&args[0]!=='-c'){return this.withShell(t,'bash',()=>this.engine.runSource(args.join(' '),t,ctx.io))}}
+    const shell=name==='sh'?'sh':'bash';
+    if(args[0]==='--version'){ctx.out('GNU bash, Version 5.2.37(1)-release (x86_64-pc-msys)\n');return 0}
+    if(args[0]==='-c')return this.withShell(t,shell,()=>this.engine.runSource(args[1]||'',t,ctx.io));
+    if(args[0]){let content;try{content=ctx.fs.read(args[0],t.cwd)}catch{ctx.err(`${shell}: ${args[0]}: No such file or directory\n`);return 127}return this.withShell(t,shell,()=>this.runScript({...ctx,args:args.slice(1)},content,ctx.fs.normalize(args[0],t.cwd)))}
+    t.shellStack.push({shell:t.shell});t.shell=shell;this.app.updateTerminalTitle?.(t);return 0;
+  }
+  async withShell(t,shell,fn){const saved=t.shell;t.shell=shell;try{return await fn()}finally{t.shell=saved}}
   async switchShell(ctx,shell){
+    {const t=ctx.t;const a=[...ctx.args];let file=null,command=null,bypass=false;const rest=[];
+      for(let i=0;i<a.length;i++){const x=a[i],lx=x.toLowerCase();if(/^[-/](executionpolicy|ep|exec)$/.test(lx)){bypass=/bypass|unrestricted/i.test(a[++i]||'');continue}if(/^[-/](noprofile|nologo|noninteractive|nop|noexit|sta|mta)$/.test(lx))continue;if(/^-(file|f)$/.test(lx)&&shell==='powershell'){file=a[++i];rest.push(...a.slice(i+1));break}if(/^[-/](c|command|k)$/.test(lx)){command=a.slice(i+1).join(' ');break}if(shell==='powershell'&&/\.ps1$/i.test(x)&&!file){file=x;rest.push(...a.slice(i+1));break}}
+      if(file){if(shell==='powershell'&&ctx.os==='winxp')return this.engine.notFound('powershell',t,ctx.io);let content;try{content=ctx.fs.read(file,t.cwd)}catch{ctx.err(`${C.red}Das Argument "${file}" für den Parameter "-File" ist nicht vorhanden. Geben Sie den Pfad zu einer vorhandenen ".ps1"-Datei als Argument für den Parameter "-File" an.${C.reset}\n`);return 64}
+        const path=ctx.fs.normalize(file,t.cwd);const savedB=t.psBypass;t.psBypass=bypass||!isWindows(ctx.os)||ctx.name==='pwsh';
+        try{if(!t.psBypass&&this.psPolicyBlocked({...ctx,name:file},path))return 1;return await this.withShell(t,'powershell',async()=>{const savedArgs=t.args;t.args=rest;try{return await this.engine.runSource(content,t,ctx.io)}finally{t.args=savedArgs}})}finally{t.psBypass=savedB}}
+      if(command!==null&&shell==='powershell'){const savedB=t.psBypass;t.psBypass=bypass||t.psBypass;try{return await this.withShell(t,'powershell',()=>this.engine.runSource(command,t,ctx.io))}finally{t.psBypass=savedB}}
+      if(ctx.name==='pwsh'&&!a.some(x=>/^[-/]c(ommand)?$/i.test(x))){t.shellStack.push({shell:t.shell});t.shell='powershell';this.app.updateTerminalTitle?.(t);ctx.out('PowerShell 7.5.4\n');return 0}
+      if(bypass&&!command&&!file&&shell==='powershell'){t.psBypass=true}}
     const t=ctx.t;
     if(shell==='powershell'&&ctx.os==='winxp'){return this.engine.notFound('powershell',t,ctx.io)}
     if(ctx.args.some(a=>/^[-/]c(ommand)?$/i.test(a))){const i=ctx.args.findIndex(a=>/^[-/]c(ommand)?$/i.test(a));const saved=t.shell;t.shell=shell;try{return await this.engine.runSource(ctx.args.slice(i+1).join(' '),t,ctx.io)}finally{t.shell=saved}}
@@ -566,6 +693,11 @@ const MAN={
   find:['nach Dateien in einer Verzeichnishierarchie suchen','[PFAD] [-name MUSTER] [-type f|d]','Durchsucht PFAD rekursiv.','find . -name "*.py"'],
   git:['das dumme Inhalts-Tracking-Werkzeug','BEFEHL [ARGS]','status, add, commit -m, log, branch, switch, diff (DesktopSim-Lernsimulation)','git add hello.py\ngit commit -m "Erster Commit"']
 };
+MAN.pip=['Paketverwaltung für Python','install|uninstall|list|freeze|show [OPTIONEN] PAKET...','Installiert Pakete aus dem Pyodide-Index (numpy, pandas, matplotlib, scipy, sympy, scikit-learn …) oder reine Python-Wheels von PyPI. In einer aktivierten virtuellen Umgebung (venv) landen die Pakete in deren site-packages und nur dort sind sie importierbar. Unter Debian, Arch und macOS verweigert pip ohne venv die Installation (PEP 668: externally-managed-environment).','python3 -m venv .venv\nsource .venv/bin/activate\npip install numpy matplotlib\npip freeze > requirements.txt\npip install -r requirements.txt\ndeactivate'];
+MAN.swipl=['SWI-Prolog','[OPTIONEN] [DATEI.pl ...]','Startet SWI-Prolog (WebAssembly). Mit Dateien werden diese konsultiert, danach erscheint das Toplevel ?- . Weitere Lösungen mit ; anfordern, Enter beendet die Suche, halt. beendet Prolog.','swipl familie.pl\nswipl -g main -t halt programm.pl\nswipl -q'];
+MAN.pwsh=['PowerShell 7 (plattformübergreifend)','[-File SKRIPT.ps1] [-Command BEFEHL]','Startet PowerShell auch unter Linux, macOS und Unix. Skripte laufen ohne Ausführungsrichtlinie.','pwsh\npwsh -File skript.ps1\npwsh -c "Get-ChildItem"'];
+MAN.wine=['Windows-Programme ausführen','cmd [/c DATEI.bat] | DATEI.bat','Führt Batch-Dateien (.bat/.cmd) und die Eingabeaufforderung unter Linux, macOS und Unix aus.','wine cmd /c start.bat\nwine cmd'];
+MAN.netstat=['Netzwerkverbindungen anzeigen','','Zeigt offene Ports des virtuellen DesktopSim-Netzes (Socket-Server aus Python und Java, http.server, php -S).','netstat\nss -tln'];MAN.ss=MAN.netstat;
 MAN.python=MAN.python3;MAN.clang=MAN.gcc;MAN['clang++']=MAN['g++'];
 
 export function gitCommand(app,ctx){

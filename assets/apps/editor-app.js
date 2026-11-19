@@ -9,6 +9,7 @@ const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelecto
 
 export class EditorApps{
   runCommandFor(path){
+    if(this.ideRunCommand)return this.ideRunCommand(path,{shell:isWindows(this.currentOS)?(this.currentOS==='win11'?'powershell':'cmd'):this.os.shell});
     const ext=extName(path),name=path.split('/').pop(),win=isWindows(this.currentOS),base=name.replace(/\.[^.]+$/,'');
     return{py:`${win?'python':'python3'} ${name}`,js:`node ${name}`,mjs:`node ${name}`,php:`php ${name}`,c:`gcc ${name} -o ${base} && ${win?base:'./'+base}`,cpp:`g++ ${name} -o ${base} && ${win?base:'./'+base}`,java:`javac ${name} && java ${base}`,sh:`bash ${name}`,cs:`dotnet run ${name}`,sql:`sqlite3 demo.db < ${name}`,bat:name,ps1:'.\\'+name}[ext]||null;
   }
