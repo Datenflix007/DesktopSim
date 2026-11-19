@@ -19,21 +19,37 @@ export const writeOut = text => { if (text) post('out', { stream: 'stdout', text
 export const writeErr = text => { if (text) post('out', { stream: 'stderr', text: String(text) }); };
 export const status = text => post('status', { text });
 
-/** Liefert die nächste Eingabezeile inklusive "\n" oder null bei Dateiende. */
+/** Blockiert, bis der Hauptthread über den Service Worker etwas auf diesem Kanal sendet (null = EOF). */
+function blockingRead() {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', new URL(`__ds_io__/read?ch=${encodeURIComponent(channel)}&n=${Date.now()}${attempt}`, BASE), false);
+    try { xhr.send(); } catch { return null; }
+    if (xhr.status === 200) return xhr.responseText;
+    if (xhr.status !== 202) return null;
+  }
+  return null;
+}
+
+/** Liefert die nächste Eingabezeile inklusive Zeilenende oder null bei Dateiende. */
 export function readLineSync() {
   if (stdinBuffer.length) return stdinBuffer.shift();
   if (stdinEOF || ioMode !== 'sync') return null;
   post('stdin-request', { channel });
-  for (let attempt = 0; attempt < 200; attempt++) {
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', new URL(`__ds_io__/read?ch=${encodeURIComponent(channel)}&n=${Date.now()}${attempt}`, BASE), false);
-    try { xhr.send(); } catch { stdinEOF = true; return null; }
-    if (xhr.status === 200) return xhr.responseText.endsWith('\n') ? xhr.responseText : xhr.responseText + '\n';
-    if (xhr.status === 204) { stdinEOF = true; return null; }
-    if (xhr.status !== 202) { stdinEOF = true; return null; }
-  }
-  stdinEOF = true;
-  return null;
+  const text = blockingRead();
+  if (text === null) { stdinEOF = true; return null; }
+  return text.endsWith('\n') ? text : text + '\n';
+}
+
+export const canBlock = () => ioMode === 'sync';
+
+/** Synchroner Aufruf in den Hauptthread (GUI-Ereignisse, virtuelles Netzwerk, Dialoge). */
+export function callSync(op, args = {}) {
+  if (ioMode !== 'sync') return { error: 'nosync' };
+  post('call', { channel, op, args });
+  const text = blockingRead();
+  if (text === null) return { error: 'eof' };
+  try { return JSON.parse(text); } catch { return { error: 'bad-reply' }; }
 }
 
 /** Byteweiser Zugriff für Laufzeiten, die stdin byteweise lesen (WASI, PHP). */

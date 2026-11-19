@@ -44,7 +44,7 @@ for(const os of OS_LIST){
 app.fs=new VFS('debian');app.git=new GitLearningRepo('debian');
 const b=shellFor('debian');
 assert.equal(await run(b,'X=5; echo $((X*2))'),'10','arithmetic');
-assert.equal(await run(b,'for f in *.py; do echo $f; done'),'hello.py\nrechner.py','for + glob');
+assert.equal(await run(b,'for f in *.py; do echo $f; done'),'fenster.py\nhello.py\nrechner.py','for + glob');
 assert.equal(await run(b,'if [ -f hello.py ]; then echo ja; else echo nein; fi'),'ja','if test');
 assert.equal(await run(b,'ls nichtda 2>/dev/null; echo $?'),'2','exit code');
 assert.equal(await run(b,'false || echo fallback'),'fallback','or-list');
@@ -90,11 +90,56 @@ assert.equal(compileSource('cpp','int main() { return 0; }').ok,true);
 
 // --- App-Verdrahtung (Quelltextprüfung) ---
 const src=async f=>readFile(new URL('../assets/'+f,import.meta.url),'utf8');
-const all=(await Promise.all(['app.js','ui/chrome.js','apps/terminal-app.js','apps/files-app.js','apps/editor-app.js','apps/browser-app.js','apps/system-apps.js','apps/classic.js','runtime/index.js'].map(src))).join('\n');
+const all=(await Promise.all(['app.js','ui/chrome.js','apps/terminal-app.js','apps/files-app.js','apps/editor-app.js','apps/browser-app.js','apps/system-apps.js','apps/classic.js','apps/ide-app.js','apps/tk-app.js','runtime/index.js'].map(src))).join('\n');
 for(const needle of ['openTerminal(','openFiles(','openEditor(','openIDE(','openBrowser(','openSettings(','openTaskManager(','openCalculator(','openSQL(','openGitGraph()','openStructogram()','openGame()','openFunLab()','menuXP()','menu7()','menu8()','menu10()','menu11()','menuKDE()','spotlight()','enterOverview()','snapWindow(','compileJava(','compileC(','runPython(','runPHP(','runWasm('])
   assert.ok(all.includes(needle),'wired: '+needle);
 const index=await readFile(new URL('../index.html',import.meta.url),'utf8');
 assert.match(index,/id="landing"/,'landing page');
 const sw=await readFile(new URL('../sw.js',import.meta.url),'utf8');
 assert.match(sw,/__ds_io__\/read/,'stdin bridge in service worker');
-console.log('PASS: 9 Systeme · Bash/Zsh/CMD/PowerShell · Pipes, Skripte, Rechte, Exitcodes · Dateisystem & Papierkorb · SQL · Git · App-Verdrahtung');
+// --- Virtuelle Umgebungen (venv) auf allen Systemen ---
+for(const os of ['debian','macos','win11','win10','arch','unix']){
+  app.fs=new VFS(os);const t=shellFor(os);const win=os.startsWith('win');
+  assert.equal(await run(t,`${win?'python':'python3'} -m venv .venv`),'',os+' venv created');
+  assert.ok(app.fs.exists(joinPath(t.cwd,'.venv/pyvenv.cfg')),os+' pyvenv.cfg');
+  assert.ok(app.fs.exists(joinPath(t.cwd,win?'.venv/Scripts/activate.bat':'.venv/bin/activate')),os+' activate script');
+  if(t.shell==='powershell'){assert.match(await run(t,'.venv\\Scripts\\Activate.ps1'),/deaktiviert/,os+' venv needs execution policy');t.psBypass=true}
+  await run(t,win?(t.shell==='powershell'?'.venv\\Scripts\\Activate.ps1':'.venv\\Scripts\\activate'):'source .venv/bin/activate');
+  assert.ok(t.venv,os+' venv active');assert.match(promptFor(t),/^\(\.venv\) /,os+' venv prompt');
+  assert.match(await run(t,'pip list'),/pip\s+25\.2/,os+' pip list in venv');
+  await run(t,'deactivate');assert.ok(!t.venv,os+' deactivated');assert.doesNotMatch(promptFor(t),/\.venv/,os+' prompt reset');
+}
+{app.fs=new VFS('debian');const t=shellFor('debian');assert.match(await run(t,'pip install numpy'),/externally-managed-environment/,'PEP 668 on debian');
+ await run(t,'python3 -m venv env && . env/bin/activate');assert.match(await run(t,'which python'),/env\/bin\/python/,'which python in venv');
+ const g=shellFor('debian');assert.match(await run(g,'./env/bin/activate'),/Keine Berechtigung/,'activate must be sourced');}
+
+// --- Skripte über Systemgrenzen: bash unter Windows, pwsh & wine unter Linux/macOS ---
+{app.fs=new VFS('win11');const c={...shellFor('win11'),shell:'cmd'};
+ app.fs.write('t.sh','#!/bin/bash\nX=5\necho "bash $((X*2))"\n',c.cwd);
+ assert.equal(await run(c,'bash t.sh'),'bash 10','git bash on windows');
+ assert.equal(await run(c,'bash -c "echo hi | tr a-z A-Z"'),'HI','bash -c on windows');
+ app.fs.write('s.ps1','$n = "Welt"\nWrite-Output "Hallo $n"\n',c.cwd);
+ assert.equal(await run(c,'powershell -ExecutionPolicy Bypass -File s.ps1'),'Hallo Welt','powershell -File with bypass');}
+for(const os of ['debian','macos','arch']){app.fs=new VFS(os);const t=shellFor(os);
+ app.fs.write('s.ps1','$n = "Welt"\nWrite-Output "Hallo $n"\n',t.cwd);assert.equal(await run(t,'pwsh -File s.ps1'),'Hallo Welt',os+' pwsh');
+ app.fs.write('s.bat','@echo off\nset X=7\necho Batch %X%\n',t.cwd);assert.match(await run(t,'wine cmd /c s.bat'),/Batch 7/,os+' wine batch');}
+
+// --- Virtuelles Netzwerk und Java-Umleitung ---
+{const {VirtualNet}=await import('../assets/runtime/net.js');const net=new VirtualNet();const a={objects:new Set()},b={objects:new Set()};
+ assert.ok(net.bind({port:7000},a).ok);const l=net.listen({port:7000},a);assert.ok(l.id,'listen');assert.equal(net.listen({port:7000},a).error,'EADDRINUSE','port in use');
+ const acc=net.accept({id:l.id},a);const c=await net.connect({host:'localhost',port:7000},b);const s=await acc;
+ net.send({conn:c.conn,data:'ping'});assert.equal((await net.recv({conn:s.conn})).data,'ping','tcp data');
+ assert.equal((await net.connect({port:7001},b)).error,'ECONNREFUSED','refused');assert.equal((await net.connect({host:'nirgendwo.invalid',port:1},b)).error,'EGAI','unknown host');
+ net.release(b);assert.equal((await net.recv({conn:s.conn})).data,'','eof after close');}
+{const {rewriteNet,usesGui}=await import('../assets/runtime/java.js');
+ assert.match(rewriteNet('import java.net.ServerSocket;\nimport java.net.Socket;'),/import dsnet\.ServerSocket;\nimport dsnet\.Socket;/,'java socket rewrite');
+ assert.match(rewriteNet('import java.net.*;'),/import dsnet\.Socket;/,'java wildcard rewrite');
+ assert.doesNotMatch(rewriteNet('catch (java.net.SocketException e)'),/dsnet/,'keep SocketException');
+ assert.ok(usesGui('import javax.swing.*;')&&!usesGui('class A{}'),'gui detection');}
+
+// --- Python-Module für tkinter/turtle/socket liegen bei ---
+for(const f of ['tkinter/__init__.py','tkinter/ttk.py','tkinter/messagebox.py','turtle.py','_dsnet.py','_dsenv.py','_ds_mpl.py'])
+  assert.ok((await readFile(new URL('../assets/runtime/pylib/'+f,import.meta.url),'utf8')).length>200,'pylib '+f);
+assert.match(await readFile(new URL('../assets/runtime/prolog/ds_toplevel.pl',import.meta.url),'utf8'),/ds_query/,'prolog toplevel helper');
+
+console.log('PASS: 9 Systeme · venv/pip · bash/pwsh/wine · virtuelles Netz · Bash/Zsh/CMD/PowerShell · Pipes, Skripte, Rechte, Exitcodes · Dateisystem & Papierkorb · SQL · Git · App-Verdrahtung');

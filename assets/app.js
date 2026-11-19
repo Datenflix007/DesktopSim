@@ -5,6 +5,7 @@ import {GitLearningRepo} from './git.js';
 import {TerminalEngine} from './terminal.js';
 import {gitCommand} from './shell/programs.js';
 import {Runtimes} from './runtime/index.js';
+import {DeviceManager} from './apps/tk-app.js';
 import {profileFor} from './ui/profiles.js';
 import {appIcon,fileIcon,folderIcon,lineIcon,osMark} from './ui/icons.js';
 import {Chrome} from './ui/chrome.js';
@@ -14,18 +15,19 @@ import {FilesApp} from './apps/files-app.js';
 import {EditorApps} from './apps/editor-app.js';
 import {BrowserApp} from './apps/browser-app.js';
 import {SystemApps} from './apps/system-apps.js';
+import {IDEApp} from './apps/ide-app.js';
 
 export const $=(s,root=document)=>root.querySelector(s);
 export const $$=(s,root=document)=>[...root.querySelectorAll(s)];
 export const esc=escapeHTML;
-const LEGACY_ICONS={branch:'git',sparkle:'fun',game:'game',structure:'structogram',code:'ide',folder:'files',terminal:'terminal',browser:'browser',database:'sql',info:'guide',file:'editor'};
+const LEGACY_ICONS={python:'ide',branch:'git',sparkle:'fun',game:'game',structure:'structogram',code:'ide',folder:'files',terminal:'terminal',browser:'browser',database:'sql',info:'guide',file:'editor'};
 export const APPS=['terminal','files','editor','ide','browser','settings','taskmgr','calc','git','structogram','game','fun','sql','guide','about','trash','computer','docs','home'];
 const EXTRA_LABELS={git:'Git Graph',structogram:'Struktogramm',game:'OS-Spiel',fun:'Fun Lab',sql:'SQL Studio',guide:'Anleitung',home:'Persönlicher Ordner'};
 
 class DesktopSim{
   constructor(){
     this.desktop=$('#desktop');this.layer=$('#window-layer');this.windows=new Map();this.serial=0;this.z=10;
-    this.servers=new Map();this.runtimes=new Runtimes();this.currentOS=null;this.fs=null;this.db=null;this.git=null;this.konami=[];
+    this.servers=new Map();this.runtimes=new Runtimes();this.devices=new DeviceManager(this);this.currentOS=null;this.fs=null;this.db=null;this.git=null;this.konami=[];
     this.termEngine=new TerminalEngine(this);this.chrome=new Chrome(this);this.workspace=1;
     this.global=this.loadJSON('desktopsim-v3-global',{quickBoot:false,lastOS:null});
     this.bindGlobal();this.renderLanding();
@@ -140,7 +142,7 @@ class DesktopSim{
     if(node.enc==='wasm'||(node.enc==='exe'&&!/\.(exe)$/i.test(path)))return this.openTerminal(null,{cwd:path.replace(/\/[^/]*$/,'')||'/',command:(isWindows(this.currentOS)?'':'./')+path.split('/').pop()});
     if(node.enc==='exe')return this.termEngine.programs.runFile(path,this.termEngine.context([path.split('/').pop()],{os:this.currentOS,shell:this.os.shell,cwd:'/',vars:{},aliases:{},history:[]},{out(){},err(){},readLine:async()=>null}));
     if(ext==='bat'||ext==='cmd'||ext==='ps1'||(ext==='sh'&&(node.mode&0o111)))return this.openTerminal(ext==='ps1'?'powershell':null,{cwd:path.replace(/\/[^/]*$/,'')||'/',command:(ext==='sh'?'./':ext==='ps1'?'.\\':'')+path.split('/').pop()});
-    if(['py','js','java','c','cpp','php','cs','sql','json','md','css','h','sh'].includes(ext)&&!editor)return this.openIDE(path);
+    if(['py','js','mjs','java','c','cpp','php','cs','sql','json','md','css','h','sh','ps1','bat','cmd','pl','pro'].includes(ext)&&!editor)return this.openIDE(path);
     if(node.enc==='b64'&&/\.(png|jpe?g|gif|svg|webp)$/i.test(path))return this.openImage(path);
     return this.openEditor(path);
   }
@@ -349,5 +351,5 @@ class DesktopSim{
 }
 
 function install(target,...mixins){for(const M of mixins)for(const k of Object.getOwnPropertyNames(M.prototype))if(k!=='constructor')Object.defineProperty(target.prototype,k,Object.getOwnPropertyDescriptor(M.prototype,k))}
-install(DesktopSim,ClassicApps,TerminalApp,FilesApp,EditorApps,BrowserApp,SystemApps);
+install(DesktopSim,ClassicApps,TerminalApp,FilesApp,EditorApps,BrowserApp,SystemApps,IDEApp);
 window.desktopSim=new DesktopSim();
