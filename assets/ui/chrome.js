@@ -6,7 +6,7 @@ const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelecto
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const KIND_APP={terminal:'terminal',files:'files',editor:'editor',ide:'ide',browser:'browser',settings:'settings',taskmgr:'taskmgr',calc:'calc',git:'git',structogram:'structogram',game:'game',fun:'fun',sql:'sql',guide:'guide',about:'about',image:'editor',dialog:'about',properties:'about',run:'about'};
-const ALL_APPS=['terminal','files','editor','ide','browser','settings','taskmgr','calc','git','structogram','game','fun','sql','guide'];
+const ALL_APPS=['terminal','files','editor','ide','browser','settings','taskmgr','calc','git','structogram','game','fun','sql','mindmap','dslab','mdgen','papermaker','guide'];
 const DE_DAYS=['So','Mo','Di','Mi','Do','Fr','Sa'],DE_MON=['Jan.','Feb.','März','Apr.','Mai','Juni','Juli','Aug.','Sept.','Okt.','Nov.','Dez.'];
 const pad=n=>String(n).padStart(2,'0');
 
